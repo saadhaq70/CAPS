@@ -1,0 +1,34 @@
+# ASH-FL Phase 1: Federated Learning Simulation Configuration
+
+# Federated Learning Parameters
+num_rounds: 3                    # Total number of federated training rounds
+num_clients_total: 5            # Total number of clients in the federation
+num_clients_per_round: 3        # Number of clients sampled per round
+
+# Model Training Parameters
+learning_rate: 0.01             # Learning rate for local SGD
+batch_size: 16                  # Batch size for local training
+local_epochs: 3                 # Number of local epochs per round
+
+# Model Architecture
+hidden_dim: 32                  # Hidden layer dimension
+input_dim: 13                   # Number of input features (Heart Disease dataset)
+output_dim: 1                   # Binary classification output
+
+# Dataset Configuration
+dataset_id: 45                  # UCI Heart Disease dataset ID
+random_seed: 42                 # Random seed for reproducibility
+test_split: 0.2                 # Fraction of data reserved for testing
+
+# Data Partitioning
+iid: true                       # Whether to use IID (true) or non-IID (false) partitioning
+
+# Aggregation Strategy
+strategy: "FedAvg"              # Aggregation strategy (FedAvg for Phase 1)
+min_fit_clients: 3              # Minimum clients needed for training
+min_evaluate_clients: 3         # Minimum clients needed for evaluation
+min_available_clients: 3        # Minimum clients that must be available
+
+# Server Configuration
+fraction_fit: 0.6               # Fraction of clients sampled for training (0.6 = 3/5)
+fraction_evaluate: 0.6          # Fraction of clients sampled for evaluation
