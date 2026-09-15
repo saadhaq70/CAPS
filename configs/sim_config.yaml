@@ -32,3 +32,33 @@ min_available_clients: 3        # Minimum clients that must be available
 # Server Configuration
 fraction_fit: 0.6               # Fraction of clients sampled for training (0.6 = 3/5)
 fraction_evaluate: 0.6          # Fraction of clients sampled for evaluation
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 2: Attack Configuration
+# Set enabled: false (default) to run the clean Phase 1 baseline unchanged.
+# Switch enabled: true and select an attack_type to inject malicious clients.
+# ──────────────────────────────────────────────────────────────────────────────
+attack:
+  enabled: false                 # Master switch — false = Phase 1 behaviour
+
+  # Which attack to inject: label_flip | sign_flip | scaling | backdoor
+  attack_type: "label_flip"
+
+  # Number of malicious clients (ignored if malicious_client_ids is non-empty)
+  num_malicious_clients: 1
+
+  # Explicit list of client IDs to mark malicious ([] = auto-pick first N)
+  malicious_client_ids: []
+
+  # ── Label-flip params (attack_type: label_flip) ──────────────────────────
+  source_label: 0                # Flip labels FROM this class …
+  target_label: 1                # … TO this class
+
+  # ── Scaling-attack params (attack_type: scaling) ─────────────────────────
+  scale_factor: 10.0             # Multiply update delta by this factor
+
+  # ── Backdoor params (attack_type: backdoor) ──────────────────────────────
+  trigger_feature_indices: [0, 1]   # Feature column indices overwritten
+  trigger_value: 1.0                # Value stamped onto trigger features
+  poison_fraction: 0.3              # Fraction of local data to poison
+  backdoor_target_label: 1          # Label forced onto poisoned samples

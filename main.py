@@ -1,6 +1,7 @@
 """
-ASH-FL Phase 1: Federated Learning Simulator
+ASH-FL: Federated Learning Simulator
 Main entry point for running FL simulation with FedAvg baseline.
+Phase 1: clean baseline.  Phase 2: attack harness (set attack.enabled: true).
 """
 
 import yaml
@@ -12,6 +13,8 @@ from pathlib import Path
 from clients.data_loader import HeartDiseaseDataLoader
 from clients.client import get_client_fn, HeartDiseaseNet, get_model_parameters
 from aggregation.strategy import FedAvgStrategy
+from attacks.base import AttackConfig
+from attacks.client_factory import get_client_fn_with_attacks
 
 
 def load_config(config_path: str = "configs/sim_config.yaml") -> dict:
@@ -49,9 +52,9 @@ def initialize_global_model(config: dict) -> list:
 
 def main():
     """Main function to run federated learning simulation."""
-    
+
     print("=" * 80)
-    print("ASH-FL Phase 1: Federated Learning Simulator")
+    print("ASH-FL: Federated Learning Simulator")
     print("=" * 80)
     
     # Load configuration
@@ -63,6 +66,15 @@ def main():
     print(f"  - Strategy: {config['strategy']}")
     print(f"  - Learning Rate: {config['learning_rate']}")
     print(f"  - Local Epochs: {config['local_epochs']}")
+
+    # Parse attack config (Phase 2 addition; safe when attack.enabled = false)
+    attack_cfg_raw = config.get("attack", {})
+    attack_config = AttackConfig.from_dict(attack_cfg_raw)
+    if attack_config.enabled:
+        print(f"  - Attack: {attack_config.attack_type.upper()} "
+              f"({attack_config.num_malicious_clients} malicious client(s))")
+    else:
+        print("  - Attack: disabled (clean Phase 1 baseline)")
     
     # Load and partition dataset
     print("\n[2/5] Loading and partitioning UCI Heart Disease dataset...")
@@ -92,11 +104,18 @@ def main():
     print(f"  - Parameters: {sum(p.size for p in initial_parameters)} weights")
     print(f"  - Device: {'GPU' if torch.cuda.is_available() else 'CPU'}")
     
-    # Create client factory function
+    # Create client factory function (Phase 2: attack-aware)
     print("\n[4/5] Setting up federated clients...")
-    client_fn = get_client_fn(client_datasets, config)
+    client_fn, ground_truth = get_client_fn_with_attacks(
+        client_data=client_datasets,
+        config=config,
+        attack_config=attack_config,
+    )
     print(f"  - Client spawning function created")
     print(f"  - Each client will train for {config['local_epochs']} local epochs per round")
+    if attack_config.enabled:
+        mal_ids = [cid for cid, bad in ground_truth.items() if bad]
+        print(f"  - Ground-truth malicious IDs (for Phase 3 scoring): {mal_ids}")
     
     # Configure FedAvg strategy
     print("\n[5/5] Configuring FedAvg aggregation strategy...")
@@ -153,11 +172,15 @@ def main():
                 print(f"  Round {round_num}: {acc:.4f}")
     
     print("\n" + "=" * 80)
-    print("Phase 1 Complete: Baseline FL simulation successful!")
-    print("Next Steps:")
+    if attack_config.enabled:
+        print(f"Phase 2 Complete: Attack simulation [{attack_config.attack_type}] done.")
+    else:
+        print("Phase 1/2 Complete: Baseline FL simulation successful!")
+    print("Next Steps (Phase 3):")
     print("  - Implement Dynamic Poisoning Score (DPS) metrics")
-    print("  - Add adaptive recovery controller")
-    print("  - Integrate robust aggregation strategies (Krum, Trimmed Mean)")
+    print("  - Add robust aggregation strategies (Krum, Trimmed Mean)")
+    print("  - Build adaptive recovery controller")
+    print("  - Run 'python attack_demo.py' to benchmark all four attack types")
     print("=" * 80)
     
     return history
