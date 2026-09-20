@@ -1,5 +1,7 @@
 # ASH-FL: Federated Learning Simulator
 
+Federated Learning with attacks, detection, and self-healing. Interactive web dashboard included.
+
 ## Quick Start
 
 ```bash
@@ -7,50 +9,52 @@
 pip install -r requirements.txt
 
 # Verify
-python test_setup.py
+python tests/test_setup.py
 
-# Phase 1 — clean baseline (5-10 min)
-python main.py
+# Run dashboard (RECOMMENDED)
+bash run_dashboard.sh
 
-# Phase 2 — attack demo (all four attack types back-to-back)
-python attack_demo.py
+# Or run simulations
+python main.py                      # Clean baseline
+python tests/attack_demo.py         # All 4 attacks
+python tests/self_healing_demo.py   # Self-healing demo
+python realtime_simulation.py       # Real-time with all features
 ```
 
-## What It Does
+## What's Included
 
-- **Dataset**: UCI Heart Disease (auto-downloaded, 297 samples, 13 features)
-- **Model**: 3-layer neural network (13→32→32→1)
-- **FL Setup**: 5 clients, 3 rounds, FedAvg aggregation
-- **Privacy**: Server never sees raw data, only model weights
+- **FL Baseline**: FedAvg on UCI Heart Disease dataset
+- **4 Attacks**: label_flip, sign_flip, scaling, backdoor
+- **Self-Healing**: Automatic detection + recovery
+- **Dashboard**: Interactive web UI with DPS visualization
+- **Tests**: 20 tests, all passing
+
+## Dashboard
+
+`bash run_dashboard.sh` → Opens at `http://localhost:8501`
+
+Configure simulation, run attacks, see DPS scores (G,C,H,P,D), watch self-healing recover.
+
+See `DOCS.md` for details.
 
 ## Files
 
 ```
-configs/sim_config.yaml        - Hyperparameters + attack config block
+configs/sim_config.yaml        - Hyperparameters + attack + self-healing config
 clients/data_loader.py         - Dataset loading & IID partitioning
 clients/client.py              - PyTorch model + Flower client
-aggregation/strategy.py        - FedAvg aggregation (unchanged)
-attacks/__init__.py            - Attack package & registry
-attacks/base.py                - AttackConfig dataclass + BaseAttack ABC
-attacks/label_flip.py          - Label-flipping attack
-attacks/sign_flip.py           - Sign-flipping (gradient reversal) attack
-attacks/scaling.py             - Update scaling / amplification attack
-attacks/backdoor.py            - Backdoor (trigger injection) attack
-attacks/malicious_client.py    - MaliciousClient wrapping HeartDiseaseClient
-attacks/client_factory.py      - Extended factory with ground-truth labels
-main.py                        - Run simulation (clean or attacked)
-attack_demo.py                 - Phase 2 benchmark: baseline vs 4 attacks
-demo_quick.py                  - Fast sanity-check (Phase 1)
+aggregation/strategy.py        - FedAvg aggregation
+attacks/                       - Attack implementations (Phase 2)
+recovery/                      - Self-healing layer (Phase 3)
+  ├── health_monitor.py        - Health tracking & degradation detection
+  ├── checkpoint_manager.py    - Save/restore trusted models
+  └── self_heal.py             - FSM recovery controller
+main.py                        - Run simulation
+attack_demo.py                 - Phase 2 benchmark
+self_healing_demo.py           - Phase 3 self-healing demo
 ```
 
-## How It Works (Simulation Mode)
-
-- Single Python process on your machine
-- No actual network/servers (Flower simulates it in memory)
-- Data partitioned at startup, clients created on-demand per round
-- Fast for research, not realistic network conditions
-
-## Enabling Attacks (Phase 2)
+## Phase 2: Attacks
 
 Edit `configs/sim_config.yaml`:
 ```yaml
@@ -58,10 +62,32 @@ attack:
   enabled: true
   attack_type: "label_flip"    # label_flip | sign_flip | scaling | backdoor
   num_malicious_clients: 1
-  source_label: 0
-  target_label: 1
 ```
-Then run `python main.py` — clean behaviour is restored by setting `enabled: false`.
+
+## Phase 3: Self-Healing
+
+Enable in `configs/sim_config.yaml`:
+```yaml
+self_healing:
+  enabled: true
+  dps_threshold: 2.0           # DPS threshold for suspicious clients
+  recovery_rounds: 3           # Rounds to retrain during recovery
+  quarantine_window: 5         # Rounds to quarantine suspicious clients
+  suspicious_weight: 0.1       # Weight for quarantined clients (0-1)
+```
+
+**Recovery Flow:**
+1. Detect degradation (accuracy drop, loss spike, high DPS, model drift)
+2. Identify suspicious clients via DPS
+3. Restore last trusted checkpoint
+4. Quarantine suspicious clients (down-weight to 0.1)
+5. Retrain for 3 rounds from checkpoint
+6. Validate: Accept if improved, else expand quarantine
+7. Resume normal operation
+
+**FSM States:** NORMAL → MONITOR → RECOVERY → VALIDATE → RESUME
+
+Demo shows automatic recovery from attack injection at rounds 8-12.
 
 ## Customize
 
@@ -72,10 +98,3 @@ num_clients_total: 5       # Change total clients
 learning_rate: 0.01        # Adjust learning rate
 local_epochs: 3            # Local training epochs
 ```
-
-## Next: Phase 3 (DPS + Robust Aggregation)
-
-1. Implement Dynamic Poisoning Score (DPS) — per-client anomaly metric
-2. Use `ground_truth` dict from `get_client_fn_with_attacks()` to measure detection accuracy
-3. Add robust aggregation strategies (Krum, Trimmed Mean, Coordinate-wise Median)
-4. Build adaptive recovery controller

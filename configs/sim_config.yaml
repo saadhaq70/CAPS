@@ -42,23 +42,48 @@ attack:
   enabled: false                 # Master switch — false = Phase 1 behaviour
 
   # Which attack to inject: label_flip | sign_flip | scaling | backdoor
-  attack_type: "label_flip"
+  attack_type: "sign_flip"
 
   # Number of malicious clients (ignored if malicious_client_ids is non-empty)
-  num_malicious_clients: 1
+  num_malicious_clients: 2
 
   # Explicit list of client IDs to mark malicious ([] = auto-pick first N)
-  malicious_client_ids: []
+  malicious_client_ids: [1, 2]
 
   # ── Label-flip params (attack_type: label_flip) ──────────────────────────
   source_label: 0                # Flip labels FROM this class …
   target_label: 1                # … TO this class
 
   # ── Scaling-attack params (attack_type: scaling) ─────────────────────────
-  scale_factor: 10.0             # Multiply update delta by this factor
+  scale_factor: 50.0             # Multiply update delta by this factor
 
   # ── Backdoor params (attack_type: backdoor) ──────────────────────────────
   trigger_feature_indices: [0, 1]   # Feature column indices overwritten
   trigger_value: 1.0                # Value stamped onto trigger features
   poison_fraction: 0.3              # Fraction of local data to poison
   backdoor_target_label: 1          # Label forced onto poisoned samples
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Phase 3: Self-Healing Configuration
+# Set enabled: true to activate self-healing layer (backward compatible)
+# When disabled, system behaves exactly as Phase 1/2
+# ──────────────────────────────────────────────────────────────────────────────
+self_healing:
+  enabled: false                 # Master switch — false = Phase 1/2 behaviour
+
+  # Health monitoring thresholds
+  accuracy_drop_threshold: 0.15  # Trigger if accuracy drops by this amount
+  loss_spike_threshold: 0.3      # Trigger if loss spikes by this fraction
+  dps_threshold: 2.0             # Max DPS before flagging as suspicious
+  suspicious_fraction_threshold: 0.3  # Fraction of suspicious clients to trigger
+  model_drift_threshold: 5.0     # L2 distance threshold for model drift
+  baseline_window: 3             # Rolling window for baseline calculation
+
+  # Recovery parameters
+  recovery_rounds: 3             # Number of rounds to retrain during recovery
+  quarantine_window: 5           # Rounds to keep clients quarantined
+  suspicious_weight: 0.1         # Weight multiplier for quarantined clients (0.0-1.0)
+  max_recovery_attempts: 3       # Max recovery attempts before giving up
+
+  # Checkpoint management
+  max_checkpoints: 3             # Number of checkpoints to retain
