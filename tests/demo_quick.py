@@ -4,8 +4,12 @@ Runs a minimal FL simulation for testing purposes.
 """
 
 import sys
+import os
 import torch
 import numpy as np
+
+# Add parent directory to path
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Set seeds
 torch.manual_seed(42)

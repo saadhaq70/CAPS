@@ -5,9 +5,13 @@ Tests all core components and the dashboard simulation.
 """
 
 import sys
+import os
 import traceback
 import torch
 import numpy as np
+
+# Add parent directory to path so imports work from tests/ folder
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 def main():
     print('=' * 80)

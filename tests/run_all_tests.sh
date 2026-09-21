@@ -39,7 +39,7 @@ fi
 echo ""
 
 echo "[4/4] Verifying imports..."
-python3 -c "
+cd "$(dirname "$0")/.." && python3 -c "
 from recovery import HealthMonitor, CheckpointManager, SelfHealingController
 print('✅ All imports work')
 "
