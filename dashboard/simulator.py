@@ -281,8 +281,11 @@ class DashboardSimulator:
                     'message': f"State: {state} | Quarantined: {quarantined}"
                 })
             
-            if 'recovery' in status_msg.lower():
-                self.results['recovery_attempts'] += 1
+            # FIXED: Track recovery attempts directly from FSM state, not status message parsing
+            # The recovery_attempt_count in the controller tracks actual recovery initiations
+            recovery_attempts_from_fsm = status.get('recovery_attempts', 0)
+            if recovery_attempts_from_fsm > self.results['recovery_attempts']:
+                self.results['recovery_attempts'] = recovery_attempts_from_fsm
         
         # FIXED: Compute aggregation weights with quarantine multipliers
         aggregation_weights = {}

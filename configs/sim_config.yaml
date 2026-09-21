@@ -1,17 +1,18 @@
-# ASH-FL Phase 1: Federated Learning Simulation Configuration
+# ASH-FL: Federated Learning Simulation Configuration (IMPROVED)
 
 # Federated Learning Parameters
-num_rounds: 3                    # Total number of federated training rounds
+num_rounds: 15                   # Total rounds (increased from 3 to 15 for better convergence)
 num_clients_total: 5            # Total number of clients in the federation
-num_clients_per_round: 3        # Number of clients sampled per round
+num_clients_per_round: 4        # Increased from 3 to 4 for more participation
 
-# Model Training Parameters
-learning_rate: 0.01             # Learning rate for local SGD
-batch_size: 16                  # Batch size for local training
-local_epochs: 3                 # Number of local epochs per round
+# Model Training Parameters (IMPROVED)
+learning_rate: 0.01             # Learning rate (works well with Adam)
+batch_size: 8                   # Reduced from 16 to 8 for small dataset
+local_epochs: 5                 # Increased from 3 to 5 for better local learning
+optimizer_type: "adam"          # NEW: Use Adam instead of SGD (better convergence)
 
-# Model Architecture
-hidden_dim: 32                  # Hidden layer dimension
+# Model Architecture (IMPROVED)
+hidden_dim: 64                  # Increased from 32 to 64 for more capacity
 input_dim: 13                   # Number of input features (Heart Disease dataset)
 output_dim: 1                   # Binary classification output
 
@@ -30,8 +31,8 @@ min_evaluate_clients: 3         # Minimum clients needed for evaluation
 min_available_clients: 3        # Minimum clients that must be available
 
 # Server Configuration
-fraction_fit: 0.6               # Fraction of clients sampled for training (0.6 = 3/5)
-fraction_evaluate: 0.6          # Fraction of clients sampled for evaluation
+fraction_fit: 0.8               # Increased from 0.6 to 0.8 (4/5 clients)
+fraction_evaluate: 0.8          # Increased for more evaluation data
 
 # ──────────────────────────────────────────────────────────────────────────────
 # Phase 2: Attack Configuration

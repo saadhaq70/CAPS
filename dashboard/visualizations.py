@@ -96,17 +96,30 @@ def create_loss_chart(results: Dict, detailed: bool = False) -> go.Figure:
     return fig
 
 
-def create_dps_radar(signal_scores: Dict[str, float], is_malicious: bool = False) -> go.Figure:
+def create_dps_radar(results: Dict, client_id: int) -> go.Figure:
     """
     Create radar chart for DPS signal breakdown.
     
     Args:
-        signal_scores: Dictionary with G, C, H, P, D scores
-        is_malicious: Whether client is malicious
+        results: Simulation results dictionary
+        client_id: Client ID to display
         
     Returns:
         Plotly figure
     """
+    # Get signal scores from final round
+    final_round = results['rounds'][-1]
+    is_malicious = results['ground_truth'].get(client_id, False)
+    
+    # Extract signal scores for this client
+    signal_scores = {
+        'G': final_round.get('G_scores', {}).get(client_id, 0.0),
+        'C': final_round.get('C_scores', {}).get(client_id, 0.0),
+        'H': final_round.get('H_scores', {}).get(client_id, 0.0),
+        'P': final_round.get('P_scores', {}).get(client_id, 0.0),
+        'D': final_round.get('D_scores', {}).get(client_id, 0.0)
+    }
+    
     categories = ['G<br>(Gradient)', 'C<br>(Cosine)', 'H<br>(History)',
                  'P<br>(Performance)', 'D<br>(Data Quality)']
     values = [signal_scores['G'], signal_scores['C'], signal_scores['H'],

@@ -1,8 +1,8 @@
-# ASH-FL: Federated Learning Simulator
+# ASH-FL: Adaptive Self-Healing Federated Learning
 
-Federated Learning with attacks, detection, and self-healing. Interactive web dashboard included.
+Federated Learning with attacks, detection, and self-healing. **NEW: Unified Cyber HUD Dashboard** with real functionality.
 
-## Quick Start
+## 🚀 Quick Start
 
 ```bash
 # Install
@@ -11,31 +11,67 @@ pip install -r requirements.txt
 # System test (verify all components)
 python3 test_system.py
 
-# Run dashboard (RECOMMENDED)
-bash run_dashboard.sh
+# Run UNIFIED dashboard (RECOMMENDED) ✨ NEW
+bash run_unified.sh
 
-# Or run simulations
+# Or run old dashboards (deprecated)
+bash run_dashboard.sh   # Plain UI, broken recovery counter
+streamlit run app.py    # Beautiful UI, fake numbers
+
+# Or run CLI simulations
 python main.py                      # Clean baseline
 python tests/attack_demo.py         # All 4 attacks
 python tests/self_healing_demo.py   # Self-healing demo
 python realtime_simulation.py       # Real-time with all features
 ```
 
+## ✨ What's New: Unified Dashboard
+
+**One dashboard with everything:**
+- 🎨 **Cyber HUD Design**: Beautiful neon glassmorphism UI (from `app.py`)
+- 🎯 **Real Functionality**: Actual DPS, attacks, self-healing (from `dashboard_app.py`)
+- 🐛 **Fixed Recovery Counter**: Now correctly tracks recovery attempts (was always 0)
+- 📊 **Enhanced Visualizations**: All charts styled with Cyber HUD theme
+
+**Launch:** `bash run_unified.sh` → Opens at `http://localhost:8501`
+
+See [UNIFIED_DASHBOARD.md](UNIFIED_DASHBOARD.md) for full documentation.
+
 ## What's Included
 
 - **FL Baseline**: FedAvg on UCI Heart Disease dataset
-- **4 Attacks**: label_flip, sign_flip, scaling, backdoor
-- **Self-Healing**: Automatic detection + recovery
-- **Dashboard**: Interactive web UI with DPS visualization
+- **4 Attacks**: label_flip, sign_flip, scaling, backdoor (per-client configuration)
+- **DPS Detection**: Real-time G, C, H, P, D scores with shadow validation
+- **Self-Healing**: FSM-based automatic recovery with checkpoint restoration
+- **Unified Dashboard**: Cyber HUD design + real simulation + fixed bugs
 - **Tests**: 20 tests, all passing
 
-## Dashboard
+## Dashboard Features
 
-`bash run_dashboard.sh` → Opens at `http://localhost:8501`
+### 🔍 Detection
+- Real-time DPS calculation (not fake!)
+- 5 signals: G (gradient deviation), C (cosine disagreement), H (history), P (performance impact), D (data quality)
+- Shadow validation for P signal (tests updates on clean data)
+- Per-client anomaly analysis with radar charts
 
-Configure simulation, run attacks, see DPS scores (G,C,H,P,D), watch self-healing recover.
+### 🎯 Attacks
+- **Per-client attack assignment**: Configure each client individually
+- **4 attack types**: Scaling (amplify gradients), Label-Flip (flip labels), Sign-Flip (reverse gradients), Backdoor
+- **Quick presets**: "2 Scaling", "2 Label-Flip", "Mixed Attacks"
+- **Configurable intensity**: Adjust attack strength
 
-See `DOCS.md` for details.
+### 🛡️ Self-Healing
+- **Automatic detection**: Triggers when DPS > threshold
+- **Client quarantine**: Reduces malicious client weight to 0.1×
+- **Checkpoint restoration**: Reverts to last trusted model
+- **FSM states**: NORMAL → MONITOR → RECOVERY → VALIDATE → RESUME
+- **Recovery tracking**: Fixed counter now shows actual attempts
+
+### 🎨 Cyber HUD Design
+- **Fonts**: Orbitron (headers), Space Grotesk (body), JetBrains Mono (code)
+- **Colors**: Neon cyan, green, purple with glowing effects
+- **Theme**: Dark radial gradient with glassmorphism cards
+- **Inspired by**: khaledoghli.com
 
 ## Files
 
