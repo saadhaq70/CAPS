@@ -20,8 +20,8 @@ Unlike simple distance metrics, DPS combines **multiple independent signals** to
 - **G (Gradient Deviation)**: How far is this update from the median?
 - **C (Cosine Disagreement)**: Is the update pointing in the wrong direction?
 - **H (History Deviation)**: Has this client's behavior suddenly changed?
-- **P (Performance Impact)**: Does this update hurt model accuracy?
-- **D (Data Quality)**: Is the client's data distribution suspicious?
+- **P (Performance Impact)**: Does this update hurt model accuracy? ✅ REAL
+- **D (Data Quality)**: ⚠️ DISABLED (requires local data access)
 
 ### Why Multiple Signals?
 
@@ -33,11 +33,27 @@ Different attacks have different signatures:
 
 By combining signals, DPS catches them all!
 
-### Formula
+### Formula (Updated)
 
 $$DPS_i = w_G \\cdot G_i + w_C \\cdot C_i + w_H \\cdot H_i + w_P \\cdot P_i + w_D \\cdot D_i$$
 
-Default weights: $w_G=0.30, w_C=0.25, w_H=0.20, w_P=0.15, w_D=0.10$
+**Current weights** (D redistributed to other signals):
+- $w_G = 0.33$ (was 0.30)
+- $w_C = 0.28$ (was 0.25)
+- $w_H = 0.22$ (was 0.20)
+- $w_P = 0.17$ (was 0.15)
+- $w_D = 0.00$ (was 0.10) - **DISABLED**
+
+### Normalization
+
+All signals normalized to [0, 1] before weighting:
+- G: divided by 2.0 (suspicious if > 2)
+- C: divided by 1.0 (suspicious if > 1)
+- H: divided by 2.0 (suspicious if > 2)
+- P: divided by 1.0 (suspicious if > 1)
+- D: always 0.0 (disabled)
+
+**Typical threshold**: DPS > 2.0 flags client as suspicious
 """
     
     explanations["📊 G - Gradient Deviation"] = """
@@ -127,72 +143,87 @@ Default: $\\alpha = 0.3$ (balances responsiveness vs stability)
     explanations["🎯 P - Performance Impact"] = """
 **P estimates how much a client's update would hurt global model performance.**
 
-### Calculation (Simplified)
+### ✅ REAL IMPLEMENTATION (Shadow Validation)
 
-In full implementation:
-1. Create **shadow model** with candidate update
-2. Evaluate on held-out **validation set**
-3. Compare accuracy to baseline
-
-In dashboard (fast approximation):
-$$P_i = \\frac{||\\Delta_i - \\text{median}||}{||\\text{median}||}$$
+**How it works:**
+1. Create **shadow model** with current global parameters
+2. Get baseline accuracy on clean validation set
+3. Apply the client's update to shadow model
+4. Measure new accuracy on same validation set
+5. Compute degradation: `P = (baseline_acc - updated_acc) / 0.1`
 
 ### Interpretation
 
-- **P < 0.5**: Likely helpful
-- **P > 1.0**: Likely harmful
-- **P > 2.0**: Very harmful
+- **P = 0**: No degradation (helpful update)
+- **P = 0.5**: Moderate degradation (suspicious)
+- **P = 1.0**: 10% accuracy drop (very harmful)
+- **P > 1.0**: Severe degradation (strong attack signal)
 
 ### Why Performance?
 
-This is the **ultimate ground truth**: if an update hurts accuracy, it's poisoned (by definition).
+This is the **ultimate ground truth**: if an update hurts accuracy, it's poisoned by definition.
 
 ### Computational Cost
 
-**Most expensive signal** (requires model evaluation). Only computed for clients with already-high DPS.
+**Most expensive signal** - requires model evaluation.
+- Only computed for participating clients
+- Uses held-out validation set (50% of test data)
+- Separate from final evaluation set
+
+### Validation Set
+
+Critical requirements:
+- **Clean** - no poisoned samples
+- **Representative** - matches global distribution
+- **Held-out** - never used for training
+- **Small** - 30-50 samples sufficient for binary classification
 
 ### What Attacks Trigger High P?
 
-- ✅ **Label-flip attacks**
-- ✅ **All attacks** (eventually)
-- Best at catching **subtle poisoning**
+- ✅ **Label-flip attacks** (forces wrong predictions)
+- ✅ **Sign-flip attacks** (moves away from optimal)
+- ✅ **All attacks** (eventually degrade performance)
+- ✅ **Subtle poisoning** (even if G, C are low)
+
+### Fallback Behavior
+
+If validation data unavailable:
+- Falls back to distance-based proxy: `P ≈ ||update|| / 10`
+- Clearly marked in logs
+- Less accurate but prevents crashes
+
+**Bottom line**: P is now REAL shadow validation, not a fake proxy.
 """
     
     explanations["📦 D - Data Quality"] = """
 **D assesses the quality of a client's local dataset.**
 
-### Calculation
+### ⚠️ CURRENT STATUS: DISABLED (D = 0.0 for all clients)
 
-Checks multiple factors:
+**Why disabled?**  
+Computing real data quality requires analyzing the client's local dataset distribution (class balance, feature variance, label noise). This **violates federated learning privacy** - the server should never access raw client data.
+
+**What would D measure (if we had access)?**
 - **Class balance**: Is one class over-represented?
 - **Feature variance**: Are features informative?
 - **Sample count**: Does client have enough data?
 - **Label noise**: Are labels consistent?
 
-Dashboard (simplified): $D_i = 0.5 + 0.1 \\cdot \\sin(i)$ (placeholder)
+### Workaround
 
-### Interpretation
+Without data access, D cannot be computed honestly. Therefore:
+- **D = 0.0** for all clients
+- D's weight (originally 0.10) has been redistributed to other signals
+- **New weights**: G=0.33, C=0.28, H=0.22, P=0.17, D=0.00
 
-- **D = 0**: Poor quality (heavily imbalanced, noisy)
-- **D = 0.5**: Moderate quality
-- **D = 1.0**: High quality (balanced, clean)
+### Future Implementation
 
-### Why Data Quality?
+Could approximate D from **client update statistics**:
+- High update variance → possible noisy data
+- Consistent loss convergence → likely good quality
+- But these are indirect proxies, not true data quality
 
-Used to **weight other signals**: if a client has poor data, high DPS might be due to noise, not malice.
-
-### Usage in DPS
-
-Other signals are scaled by data quality:
-$$G'_i = G_i \\cdot (1 + \\beta \\cdot (1 - D_i))$$
-
-Default: $\\beta = 0.5$
-
-### What This Catches
-
-- Non-IID data effects
-- Natural distribution shift
-- Honest clients with bad luck
+**Bottom line**: Honest FL means we can't peek at local data, so D stays at 0.
 """
     
     explanations["🤝 Trust & Reputation"] = """

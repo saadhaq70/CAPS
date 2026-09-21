@@ -8,8 +8,8 @@ Federated Learning with attacks, detection, and self-healing. Interactive web da
 # Install
 pip install -r requirements.txt
 
-# Verify
-python tests/test_setup.py
+# System test (verify all components)
+python3 test_system.py
 
 # Run dashboard (RECOMMENDED)
 bash run_dashboard.sh

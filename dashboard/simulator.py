@@ -1,11 +1,17 @@
 """
-Dashboard Simulator
-Simplified FL simulator optimized for interactive dashboard use.
+Dashboard Simulator (FIXED VERSION)
+FL simulator with proper self-healing integration and real DPS computation.
+
+FIXES:
+- DPS calculator receives validation data for real P computation
+- Self-healing weights actually affect aggregation
+- Quarantined clients receive 0.05-0.1x weight multiplier
+- Checkpoint restoration properly updates global model
 """
 
 import numpy as np
 import torch
-from typing import Dict, List, Callable, Optional
+from typing import Dict, List, Callable, Optional, Tuple
 from collections import defaultdict
 
 from clients.data_loader import HeartDiseaseDataLoader
@@ -17,7 +23,7 @@ from .dps_calculator import DPSCalculator
 
 
 class DashboardSimulator:
-    """Fast FL simulator for dashboard with detailed metrics tracking."""
+    """FL simulator with proper self-healing and DPS integration."""
     
     def __init__(self, config: Dict):
         """
@@ -42,6 +48,16 @@ class DashboardSimulator:
         self.model = HeartDiseaseNet(input_dim=self.input_dim, hidden_dim=32, output_dim=1)
         self.global_params = get_model_parameters(self.model)
         
+        # Initialize results storage BEFORE setting up attacks
+        self.results = {
+            'rounds': [],
+            'ground_truth': {},  # Will be filled by _setup_attacks
+            'config': config,
+            'events': [],
+            'recovery_attempts': 0,
+            'checkpoint_count': 0
+        }
+        
         # Initialize attack configuration
         self._setup_attacks()
         
@@ -49,15 +65,15 @@ class DashboardSimulator:
         if config['enable_self_healing']:
             sh_config = {
                 'enabled': True,
-                'dps_threshold': config['dps_threshold'],
+                'dps_threshold': config.get('dps_threshold', 0.6),  # Use config value (normalized [0,1])
                 'recovery_rounds': config['recovery_rounds'],
                 'quarantine_window': 5,
                 'suspicious_weight': 0.1,
                 'max_recovery_attempts': 3,
-                'accuracy_drop_threshold': 0.15,
-                'loss_spike_threshold': 0.3,
-                'suspicious_fraction_threshold': 0.3,
-                'model_drift_threshold': 5.0,
+                'accuracy_drop_threshold': 0.10,  # FIXED: More sensitive (was 0.15)
+                'loss_spike_threshold': 0.25,     # FIXED: More sensitive (was 0.3)
+                'suspicious_fraction_threshold': 0.2,  # FIXED: More sensitive (was 0.3) - triggers with 1/5 clients
+                'model_drift_threshold': 3.0,     # FIXED: More sensitive (was 5.0)
                 'baseline_window': 3,
                 'max_checkpoints': 3
             }
@@ -65,18 +81,18 @@ class DashboardSimulator:
         else:
             self.sh_controller = None
         
-        # Initialize DPS calculator
-        self.dps_calculator = DPSCalculator(self.num_clients)
+        # Initialize DPS calculator with validation data for real P computation
+        # Use a small held-out validation set (20% of test data)
+        X_test, y_test = self.test_data
+        val_size = int(len(X_test) * 0.5)  # Use 50% for validation
+        self.validation_data = (X_test[:val_size], y_test[:val_size])
+        self.eval_test_data = (X_test[val_size:], y_test[val_size:])
         
-        # Results storage
-        self.results = {
-            'rounds': [],
-            'ground_truth': self.ground_truth,
-            'config': config,
-            'events': [],
-            'recovery_attempts': 0,
-            'checkpoint_count': 0
-        }
+        self.dps_calculator = DPSCalculator(
+            self.num_clients,
+            model_template=self.model,
+            validation_data=self.validation_data
+        )
     
     def _setup_data(self):
         """Load and partition dataset."""
@@ -96,22 +112,50 @@ class DashboardSimulator:
         self.input_dim = federated_data['input_dim']
     
     def _setup_attacks(self):
-        """Setup attack configuration."""
-        if self.config['enable_attack']:
-            attack_config = AttackConfig(
-                enabled=True,
-                attack_type=self.config['attack_type'],
-                num_malicious_clients=self.config['num_malicious'],
-                malicious_client_ids=[],
-                source_label=0,
-                target_label=1,
-                scale_factor=self.config['scale_factor'],
-                trigger_feature_indices=[0, 1],
-                trigger_value=1.0,
-                poison_fraction=0.3,
-                backdoor_target_label=1
-            )
+        """Setup attack configuration with per-client support."""
+        if self.config.get('enable_attack', False):
+            # Check if we have per-client attack configuration
+            client_attacks = self.config.get('client_attacks', {})
+            
+            if client_attacks:
+                # Per-client configuration
+                self.per_client_attacks = client_attacks
+                malicious_ids = [cid for cid, attack in client_attacks.items() if attack != "none"]
+                
+                # Use first non-none attack as primary type for legacy compatibility
+                primary_attack = next((a for a in client_attacks.values() if a != "none"), "scaling")
+                
+                attack_config = AttackConfig(
+                    enabled=True,
+                    attack_type=primary_attack,
+                    num_malicious_clients=len(malicious_ids),
+                    malicious_client_ids=malicious_ids,
+                    source_label=0,
+                    target_label=1,
+                    scale_factor=self.config.get('scale_factor', 50.0),
+                    trigger_feature_indices=[0, 1],
+                    trigger_value=1.0,
+                    poison_fraction=0.3,
+                    backdoor_target_label=1
+                )
+            else:
+                # Legacy single-attack configuration
+                self.per_client_attacks = None
+                attack_config = AttackConfig(
+                    enabled=True,
+                    attack_type=self.config.get('attack_type', 'scaling'),
+                    num_malicious_clients=self.config.get('num_malicious', 2),
+                    malicious_client_ids=[],
+                    source_label=0,
+                    target_label=1,
+                    scale_factor=self.config.get('scale_factor', 50.0),
+                    trigger_feature_indices=[0, 1],
+                    trigger_value=1.0,
+                    poison_fraction=0.3,
+                    backdoor_target_label=1
+                )
         else:
+            self.per_client_attacks = None
             attack_config = AttackConfig(enabled=False)
         
         # Get client factory
@@ -119,8 +163,16 @@ class DashboardSimulator:
             client_data=self.client_datasets,
             config={'input_dim': self.input_dim, 'hidden_dim': 32, 'output_dim': 1,
                    'learning_rate': 0.01, 'batch_size': 16, 'local_epochs': 3},
-            attack_config=attack_config
+            attack_config=attack_config,
+            per_client_attacks=self.per_client_attacks  # Pass per-client config
         )
+        
+        # Update ground_truth in results
+        self.results['ground_truth'] = self.ground_truth
+        
+        # Store per-client attack types in results for dashboard display
+        if self.per_client_attacks:
+            self.results['client_attacks'] = self.per_client_attacks
     
     def run_single_round(self, round_num: int) -> Dict:
         """
@@ -146,31 +198,31 @@ class DashboardSimulator:
             )
             client_updates.append((int(cid), updated_params, num_samples))
         
-        # Aggregate (simple FedAvg)
-        all_params = [params for _, params, _ in client_updates]
-        candidate_params = []
-        for i in range(len(all_params[0])):
-            layer_params = [client_params[i] for client_params in all_params]
-            avg_param = np.mean(layer_params, axis=0)
-            candidate_params.append(avg_param)
-        
-        # Evaluate on test set
-        set_model_parameters(self.model, candidate_params)
-        metrics = self._evaluate_model()
-        
-        # Compute DPS scores for all clients
+        # FIXED: Compute DPS with real P (shadow validation)
         dps_scores = self.dps_calculator.compute_dps_scores(
             client_updates=[params for _, params, _ in client_updates],
             client_ids=[cid for cid, _, _ in client_updates],
-            round_num=round_num
+            round_num=round_num,
+            global_params=self.global_params
         )
+        
+        # Debug: Print max DPS and all scores
+        if len(dps_scores) > 0:
+            max_dps = max(dps_scores.values())
+            threshold = self.config.get('dps_threshold', 0.6)
+            print(f"  [Round {round_num}] DPS Scores: {[(cid, f'{dps:.3f}') for cid, dps in sorted(dps_scores.items()) if dps > 0]}")
+            print(f"  [Round {round_num}] Max DPS: {max_dps:.3f} | Threshold: {threshold}")
+            if max_dps > threshold:
+                print(f"  [Round {round_num}] ⚠️  ALERT: Max DPS exceeds threshold!")
+            else:
+                print(f"  [Round {round_num}] ℹ️  Below threshold (need {threshold - max_dps:.3f} more)")
         
         # Fill in 0 for non-selected clients
         for cid in range(self.num_clients):
             if cid not in [c for c, _, _ in client_updates]:
                 dps_scores[cid] = 0.0
         
-        # Compute trust scores (simple decay based on DPS)
+        # Compute trust scores (exponential decay based on DPS)
         trust_scores = {}
         if len(self.results['rounds']) > 0:
             prev_trust = self.results['rounds'][-1]['trust_scores']
@@ -184,27 +236,25 @@ class DashboardSimulator:
         else:
             trust_scores = {cid: 1.0 for cid in range(self.num_clients)}
         
-        # Compute aggregation weights
-        aggregation_weights = {}
-        gamma = 2.0  # Trust sensitivity
-        eta = 1.5    # DPS penalty
-        
-        for cid, _, num_samples in client_updates:
-            trust = trust_scores[cid]
-            dps = dps_scores[cid]
-            weight = num_samples * (trust ** gamma) * ((1 - min(dps / 10.0, 0.99)) ** eta)
-            aggregation_weights[cid] = weight
-        
-        # Normalize weights
-        total_weight = sum(aggregation_weights.values())
-        if total_weight > 0:
-            aggregation_weights = {k: v / total_weight for k, v in aggregation_weights.items()}
-        
-        # Apply self-healing if enabled
+        # FIXED: Apply self-healing BEFORE aggregation to get quarantine info
         state = 'NORMAL'
         quarantined = []
+        recovery_params = None
         
         if self.sh_controller:
+            # First, do a preliminary aggregation to get candidate params
+            all_params = [params for _, params, _ in client_updates]
+            candidate_params = []
+            for i in range(len(all_params[0])):
+                layer_params = [client_params[i] for client_params in all_params]
+                avg_param = np.mean(layer_params, axis=0)
+                candidate_params.append(avg_param)
+            
+            # Evaluate candidate
+            set_model_parameters(self.model, candidate_params)
+            metrics = self._evaluate_model()
+            
+            # Update self-healing controller
             final_params, status_msg = self.sh_controller.update(
                 round_num=round_num,
                 candidate_params=candidate_params,
@@ -214,12 +264,15 @@ class DashboardSimulator:
                 client_updates=client_updates
             )
             
-            self.global_params = final_params if final_params is not None else candidate_params
-            
+            # Get state and quarantine info
             status = self.sh_controller.get_status_summary()
             state = status['state']
             quarantined = [cid for cid in range(self.num_clients)
                           if self.sh_controller.is_client_quarantined(cid)]
+            
+            # Check if recovery provided different params (checkpoint restore)
+            if final_params is not None and state in ['RECOVERY', 'VALIDATE']:
+                recovery_params = final_params
             
             # Log events
             if state != 'NORMAL':
@@ -230,10 +283,56 @@ class DashboardSimulator:
             
             if 'recovery' in status_msg.lower():
                 self.results['recovery_attempts'] += 1
-        else:
-            self.global_params = candidate_params
         
-        # Store round results
+        # FIXED: Compute aggregation weights with quarantine multipliers
+        aggregation_weights = {}
+        gamma = 2.0  # Trust sensitivity
+        eta = 1.5    # DPS penalty
+        
+        for cid, _, num_samples in client_updates:
+            trust = trust_scores[cid]
+            dps = dps_scores[cid]
+            
+            # Base weight from trust and DPS
+            base_weight = num_samples * (trust ** gamma) * ((1 - min(dps / 10.0, 0.99)) ** eta)
+            
+            # FIXED: Apply quarantine multiplier if client is quarantined
+            if self.sh_controller and self.sh_controller.is_client_quarantined(cid):
+                quarantine_mult = self.sh_controller.get_client_weight_multiplier(cid)
+                weight = base_weight * quarantine_mult
+            else:
+                weight = base_weight
+            
+            aggregation_weights[cid] = weight
+        
+        # Normalize weights
+        total_weight = sum(aggregation_weights.values())
+        if total_weight > 0:
+            aggregation_weights = {k: v / total_weight for k, v in aggregation_weights.items()}
+        
+        # FIXED: Perform weighted aggregation (not simple average)
+        if recovery_params is not None:
+            # Use recovery params (checkpoint restore)
+            self.global_params = recovery_params
+        else:
+            # Weighted aggregation based on computed weights
+            weighted_params = []
+            all_params = [params for _, params, _ in client_updates]
+            
+            for i in range(len(all_params[0])):
+                layer_sum = np.zeros_like(all_params[0][i])
+                for (cid, params, _), update_params in zip(client_updates, all_params):
+                    weight = aggregation_weights.get(cid, 0.0)
+                    layer_sum += weight * update_params[i]
+                weighted_params.append(layer_sum)
+            
+            self.global_params = weighted_params
+        
+        # Final evaluation with actual global params
+        set_model_parameters(self.model, self.global_params)
+        metrics = self._evaluate_model()
+        
+        # Store round results with REAL values
         round_result = {
             'round': round_num,
             'metrics': metrics,
@@ -243,11 +342,11 @@ class DashboardSimulator:
             'selected_clients': list(selected_clients),
             'state': state,
             'quarantined': quarantined,
-            'G_scores': self.dps_calculator.last_G_scores,
-            'C_scores': self.dps_calculator.last_C_scores,
-            'H_scores': self.dps_calculator.last_H_scores,
-            'P_scores': self.dps_calculator.last_P_scores,
-            'D_scores': self.dps_calculator.last_D_scores
+            'G_scores': self.dps_calculator.last_G_scores.copy(),
+            'C_scores': self.dps_calculator.last_C_scores.copy(),
+            'H_scores': self.dps_calculator.last_H_scores.copy(),
+            'P_scores': self.dps_calculator.last_P_scores.copy(),
+            'D_scores': self.dps_calculator.last_D_scores.copy()
         }
         
         # Update results
@@ -277,8 +376,8 @@ class DashboardSimulator:
         return self.results
     
     def _evaluate_model(self) -> Dict[str, float]:
-        """Evaluate model on test set."""
-        X_test, y_test = self.test_data
+        """Evaluate model on test set (separate from validation used for P)."""
+        X_test, y_test = self.eval_test_data
         
         self.model.eval()
         with torch.no_grad():

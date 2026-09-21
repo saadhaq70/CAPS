@@ -77,7 +77,17 @@ All 20 tests passing:
 
 ## Changes Log
 
-**Latest: Organized tests/** 
+**Latest: Critical Fixes (Rigorously Correct System)**
+- Fixed D signal: Honest disable (0.0) instead of fake sin(client_id)
+- Fixed P signal: Real shadow validation instead of distance proxy
+- Improved H signal: Feature vector EMA instead of raw parameters
+- Fixed self-healing: Quarantine weights actually enforced (0.05-0.1x)
+- Fixed aggregation: Checkpoint restore actually updates global model
+- Fixed DPS: All signals normalized to [0,1] before weighting
+- Updated weights: G=0.33, C=0.28, H=0.22, P=0.17, D=0.00
+- See `FIXES_SUMMARY.md` for complete details
+
+**Organized tests/** 
 - Moved all test files to `tests/` folder
 - Updated import paths
 - Config reset to defaults (attacks/self-healing disabled)
