@@ -38,10 +38,10 @@ By combining signals, DPS catches them all!
 $$DPS_i = w_G \\cdot G_i + w_C \\cdot C_i + w_H \\cdot H_i + w_P \\cdot P_i + w_D \\cdot D_i$$
 
 **Current weights** (D weight redistributed, P increased for label-flip detection):
-- $w_G = 0.30$ 
+- $w_G = 0.27$ 
 - $w_C = 0.27$ 
-- $w_H = 0.20$ 
-- $w_P = 0.23$ (increased from 0.17 to better catch subtle attacks)
+- $w_H = 0.19$ 
+- $w_P = 0.27$ (significantly increased for better label-flip detection)
 - $w_D = 0.00$ - **DISABLED for privacy**
 
 ### Normalization
@@ -235,10 +235,10 @@ Computing real data quality requires analyzing the client's local dataset distri
 Since D cannot be computed honestly, its weight has been redistributed to strengthen the other signals:
 
 **Updated weights** (effective now):
-- $w_G = 0.30$ (was 0.28)
+- $w_G = 0.27$ (was 0.28)
 - $w_C = 0.27$ (was 0.25)
-- $w_H = 0.20$ (unchanged)
-- $w_P = 0.23$ (was 0.15) - **significantly increased for label-flip detection**
+- $w_H = 0.19$ (was 0.20)
+- $w_P = 0.27$ (was 0.15) - **significantly increased for label-flip detection**
 - $w_D = 0.00$ (was 0.10) - **DISABLED**
 
 ### Privacy vs. Detection Trade-off

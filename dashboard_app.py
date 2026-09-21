@@ -1,4 +1,17 @@
 """
+⚠️ DEPRECATED: This dashboard is deprecated in favor of the unified dashboard.
+
+Please use:
+    bash run_unified.sh
+
+The unified dashboard has:
+- Beautiful Cyber HUD design
+- All features from this file
+- Fixed recovery counter bug
+- Better visualizations
+
+---
+
 ASH-FL Interactive Dashboard (REBUILT)
 Complete Streamlit app with proper malicious client detection and per-client attack configuration.
 """
@@ -58,6 +71,23 @@ def main():
     # Header
     st.markdown('<div class="main-header">🛡️ ASH-FL Dashboard</div>', unsafe_allow_html=True)
     st.markdown('<p style="text-align: center; font-size: 1.2rem;">Adaptive Self-Healing Federated Learning</p>', unsafe_allow_html=True)
+    
+    # Deprecation notice
+    st.error("""
+    ⚠️ **DEPRECATED DASHBOARD** - This dashboard has been replaced.
+    
+    **Please use the unified dashboard:**
+    ```bash
+    bash run_unified.sh
+    ```
+    
+    Benefits:
+    - ✅ Beautiful Cyber HUD design
+    - ✅ Fixed recovery counter (no longer always 0)
+    - ✅ Enhanced visualizations
+    - ✅ All features in one place
+    """)
+    
     st.markdown("---")
     
     # Sidebar Configuration

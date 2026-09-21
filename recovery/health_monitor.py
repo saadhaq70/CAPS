@@ -16,7 +16,7 @@ class HealthMonitor:
         self,
         accuracy_drop_threshold: float = 0.15,
         loss_spike_threshold: float = 0.3,
-        dps_threshold: float = 2.0,
+        dps_threshold: float = 0.55,  # IMPROVED: Lowered from 2.0 to 0.55 (normalized)
         suspicious_fraction_threshold: float = 0.3,
         model_drift_threshold: float = 5.0,
         baseline_window: int = 3,
@@ -153,17 +153,18 @@ class HealthMonitor:
             fraction_suspicious = num_suspicious / len(dps_dict) if len(dps_dict) > 0 else 0.0
 
             # Check if max DPS exceeds critical threshold
-            # NOTE: DPS is normalized [0,1], so threshold of 0.7 means 70% malicious confidence
-            if max_dps > 0.6:  # FIXED: Lower threshold (was 0.7)
+            # NOTE: DPS is normalized [0,1], so threshold of 0.55 means 55% malicious confidence
+            # IMPROVED: More sensitive thresholds for label-flip detection
+            if max_dps > 0.55:  # IMPROVED: Lower threshold from 0.6 to 0.55
                 print(
-                    f"  [HealthMonitor] Max DPS {max_dps:.3f} exceeds critical threshold (0.6)"
+                    f"  [HealthMonitor] Max DPS {max_dps:.3f} exceeds critical threshold (0.55)"
                 )
                 return True
             
-            # Also check if any client exceeds the configured threshold significantly
-            if max_dps > self.dps_threshold * 1.1:  # 10% above threshold (was 1.2)
+            # Also check if any client exceeds the configured threshold even slightly
+            if max_dps > self.dps_threshold * 1.05:  # 5% above threshold (was 10%)
                 print(
-                    f"  [HealthMonitor] Max DPS {max_dps:.3f} exceeds threshold {self.dps_threshold} by 10%"
+                    f"  [HealthMonitor] Max DPS {max_dps:.3f} exceeds threshold {self.dps_threshold} by 5%+"
                 )
                 return True
 

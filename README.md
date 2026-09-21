@@ -4,38 +4,49 @@ Federated Learning with attacks, detection, and self-healing. **NEW: Unified Cyb
 
 ## 🚀 Quick Start
 
+**Recommended: Use the Unified Dashboard**
 ```bash
-# Install
+# Install dependencies
 pip install -r requirements.txt
 
-# System test (verify all components)
+# Launch unified dashboard (opens at http://localhost:8501)
+bash run_unified.sh
+```
+
+**Other options (for specific purposes):**
+```bash
+# System test (verify all components work)
 python3 test_system.py
 
-# Run UNIFIED dashboard (RECOMMENDED) ✨ NEW
-bash run_unified.sh
-
-# Or run old dashboards (deprecated)
-bash run_dashboard.sh   # Plain UI, broken recovery counter
-streamlit run app.py    # Beautiful UI, fake numbers
-
-# Or run CLI simulations
+# CLI simulations (for scripting/automation)
 python main.py                      # Clean baseline
 python tests/attack_demo.py         # All 4 attacks
 python tests/self_healing_demo.py   # Self-healing demo
-python realtime_simulation.py       # Real-time with all features
+
+# OLD DASHBOARDS (DEPRECATED - use unified dashboard instead)
+# bash run_dashboard.sh              # Plain UI, broken recovery counter
+# streamlit run app.py               # Beautiful UI, fake numbers
 ```
 
-## ✨ What's New: Unified Dashboard
+## ✨ Unified Dashboard (Recommended)
 
-**One dashboard with everything:**
-- 🎨 **Cyber HUD Design**: Beautiful neon glassmorphism UI (from `app.py`)
-- 🎯 **Real Functionality**: Actual DPS, attacks, self-healing (from `dashboard_app.py`)
-- 🐛 **Fixed Recovery Counter**: Now correctly tracks recovery attempts (was always 0)
-- 📊 **Enhanced Visualizations**: All charts styled with Cyber HUD theme
+**The unified dashboard is the single entry point for all ASH-FL features.**
 
-**Launch:** `bash run_unified.sh` → Opens at `http://localhost:8501`
+**Launch:**
+```bash
+bash run_unified.sh
+```
 
-See [UNIFIED_DASHBOARD.md](UNIFIED_DASHBOARD.md) for full documentation.
+**What you get:**
+- 🎨 **Cyber HUD Design**: Beautiful neon glassmorphism UI
+- 🎯 **Real Functionality**: Actual DPS, attacks, and self-healing (not simulated!)
+- 🐛 **Fixed Bugs**: Recovery counter works correctly
+- 📊 **Complete Features**: Network topology, DPS analysis, FSM states, trust evolution
+- 🛡️ **Self-Healing Demo**: Watch automatic recovery in action
+
+**All features in one dashboard - no need to run multiple apps!**
+
+See [UNIFIED_DASHBOARD.md](UNIFIED_DASHBOARD.md) for detailed documentation.
 
 ## What's Included
 
@@ -43,8 +54,10 @@ See [UNIFIED_DASHBOARD.md](UNIFIED_DASHBOARD.md) for full documentation.
 - **4 Attacks**: label_flip, sign_flip, scaling, backdoor (per-client configuration)
 - **DPS Detection**: Real-time G, C, H, P, D scores with shadow validation
 - **Self-Healing**: FSM-based automatic recovery with checkpoint restoration
-- **Unified Dashboard**: Cyber HUD design + real simulation + fixed bugs
+- **Unified Dashboard**: Cyber HUD design + real simulation + all features ⭐
 - **Tests**: 20 tests, all passing
+
+**Note:** Old dashboards (`app.py`, `dashboard_app.py`) are deprecated. Use `unified_dashboard.py` via `bash run_unified.sh`.
 
 ## Dashboard Features
 

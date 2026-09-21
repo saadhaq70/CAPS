@@ -435,12 +435,12 @@ def render_sidebar():
         
         enable_self_healing = st.checkbox("Enable Self-Healing", value=True)
         if enable_self_healing:
-            dps_threshold = st.slider("DPS Threshold", 0.3, 1.0, 0.6, 0.05,
-                                     help="Normalized DPS threshold [0,1]")
-            st.info(f"💡 Threshold: {dps_threshold} (0.6=balanced, 0.7=strict)")
+            dps_threshold = st.slider("DPS Threshold", 0.3, 1.0, 0.55, 0.05,
+                                     help="Normalized DPS threshold [0,1] - Lower = more sensitive")
+            st.info(f"💡 Threshold: {dps_threshold} (0.55=sensitive, 0.65=balanced, 0.75=strict)")
             recovery_rounds = st.slider("Recovery Rounds", 1, 5, 3)
         else:
-            dps_threshold = 0.6
+            dps_threshold = 0.55
             recovery_rounds = 3
 
         st.markdown("---")
@@ -693,6 +693,70 @@ def render_overview_tab(results, dps_threshold, num_clients):
     
     st.markdown("---")
     
+    # Accuracy Analysis Section
+    st.markdown("### 📈 ACCURACY ANALYSIS")
+    
+    # Compute accuracy phases
+    accuracies = [r['metrics']['accuracy'] for r in results['rounds']]
+    malicious_clients = [cid for cid, is_mal in results['ground_truth'].items() if is_mal]
+    has_attacks = len(malicious_clients) > 0
+    self_healing_enabled = results.get('config', {}).get('enable_self_healing', False)
+    
+    col1, col2, col3 = st.columns(3)
+    
+    with col1:
+        clean_acc = accuracies[0] if len(accuracies) > 0 else 0.0
+        st.markdown(f"""
+        <div class="cyber-card">
+            <div class="metric-sub">INITIAL (CLEAN)</div>
+            <div class="metric-val" style="color: var(--neon-green);">{clean_acc:.1%}</div>
+            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Round 1 baseline</div>
+        </div>
+        """, unsafe_allow_html=True)
+    
+    with col2:
+        if has_attacks and len(accuracies) > 3:
+            # Find lowest accuracy (likely during attack)
+            attack_acc = min(accuracies[1:])  # Skip initial
+            st.markdown(f"""
+            <div class="cyber-card">
+                <div class="metric-sub">LOWEST (ATTACK)</div>
+                <div class="metric-val" style="color: var(--neon-red);">{attack_acc:.1%}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Degradation: {(clean_acc - attack_acc):.1%}</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="cyber-card">
+                <div class="metric-sub">LOWEST (ATTACK)</div>
+                <div class="metric-val" style="color: var(--text-muted);">N/A</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">No attacks</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    with col3:
+        final_acc = accuracies[-1] if len(accuracies) > 0 else 0.0
+        if has_attacks and self_healing_enabled:
+            recovery_pct = (final_acc / clean_acc * 100) if clean_acc > 0 else 0
+            recovery_color = "var(--neon-green)" if recovery_pct >= 95 else "var(--neon-cyan)"
+            st.markdown(f"""
+            <div class="cyber-card">
+                <div class="metric-sub">FINAL (RECOVERY)</div>
+                <div class="metric-val" style="color: {recovery_color};">{final_acc:.1%}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Recovery: {recovery_pct:.0f}% of clean</div>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            st.markdown(f"""
+            <div class="cyber-card">
+                <div class="metric-sub">FINAL</div>
+                <div class="metric-val" style="color: var(--neon-cyan);">{final_acc:.1%}</div>
+                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Improvement: {(final_acc - clean_acc):.1%}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
     # Ground truth table
     st.markdown("### 🎯 GROUND TRUTH & DETECTION STATUS")
     
@@ -836,6 +900,59 @@ def render_selfhealing_tab(results):
     )
     st.plotly_chart(fig, use_container_width=True, key="trust_evolution_chart")
     st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("---")
+    
+    # Aggregation weights visualization
+    st.markdown("#### ⚖️ Aggregation Weights (Per-Client)")
+    
+    st.markdown('<div class="cyber-card" style="padding: 1rem;">', unsafe_allow_html=True)
+    st.markdown("""
+    <span style="color: var(--text-muted); font-size: 0.85rem;">
+    Effective weights applied during model aggregation. Quarantined clients receive 0.05-0.1× weight.
+    </span>
+    """, unsafe_allow_html=True)
+    
+    # Create weights table for final round
+    final_round = results['rounds'][-1]
+    agg_weights = final_round.get('aggregation_weights', {})
+    dps_scores = final_round.get('dps_scores', {})
+    trust_scores = final_round.get('trust_scores', {})
+    quarantined = final_round.get('quarantined', [])
+    
+    weights_data = []
+    for cid in sorted(results['ground_truth'].keys()):
+        is_mal = results['ground_truth'][cid]
+        weight = agg_weights.get(cid, 1.0 / len(results['ground_truth']))
+        dps = dps_scores.get(cid, 0.0)
+        trust = trust_scores.get(cid, 1.0)
+        is_quarantined = cid in quarantined
+        
+        status = "🔴 Malicious" if is_mal else "✅ Honest"
+        quar_status = "⚠️ QUARANTINED" if is_quarantined else "✓ Active"
+        
+        weights_data.append({
+            "Client": f"Client {cid}",
+            "Ground Truth": status,
+            "Status": quar_status,
+            "Trust": f"{trust:.3f}",
+            "DPS": f"{dps:.3f}",
+            "Agg Weight": f"{weight:.4f}",
+            "Relative %": f"{weight * 100:.1f}%"
+        })
+    
+    weights_df = pd.DataFrame(weights_data)
+    st.dataframe(weights_df, use_container_width=True, hide_index=True)
+    
+    st.markdown("""
+    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">
+    <strong>Key:</strong> Quarantined clients have weight ≈ 0.05-0.1 (5-10% of honest clients). 
+    Trust and DPS scores influence final aggregation weights.
+    </div>
+    """, unsafe_allow_html=True)
+    st.markdown('</div>', unsafe_allow_html=True)
+    
+    st.markdown("---")
     
     # Summary stats
     st.markdown("#### 📊 Recovery Summary")

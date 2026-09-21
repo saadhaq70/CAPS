@@ -114,9 +114,10 @@ class DPSCalculator:
             
             # Combine scores (weighted average)
             # D weight redistributed to other signals
-            # IMPROVED: Slightly increased P weight for better label-flip detection
-            # Weights: G=0.30, C=0.27, H=0.20, P=0.23 (was 0.17), D=0.00
-            weights = {'G': 0.30, 'C': 0.27, 'H': 0.20, 'P': 0.23, 'D': 0.00}
+            # IMPROVED: Increased P weight for better label-flip detection
+            # Weights: G=0.27, C=0.27, H=0.19, P=0.27 (was 0.23), D=0.00
+            # P now has equal weight to G and C for better sensitivity
+            weights = {'G': 0.27, 'C': 0.27, 'H': 0.19, 'P': 0.27, 'D': 0.00}
             dps = (weights['G'] * G +
                    weights['C'] * C +
                    weights['H'] * H +
@@ -295,9 +296,10 @@ class DPSCalculator:
                 loss_spike = 0.0
             
             # Combine both signals with emphasis on accuracy
-            # Scale: 0.1 accuracy drop = 1.0, or 50% loss increase = 1.0
-            acc_score = max(0.0, acc_degradation / 0.08)  # More sensitive (was 0.1)
-            loss_score = max(0.0, loss_spike / 0.5)
+            # Scale: 0.1 accuracy drop = 1.0, or 30% loss increase = 1.0
+            # IMPROVED: More sensitive thresholds for label-flip detection
+            acc_score = max(0.0, acc_degradation / 0.05)  # Was 0.08, now 0.05 = more sensitive
+            loss_score = max(0.0, loss_spike / 0.3)  # Was 0.5, now 0.3 = more sensitive
             
             # Take max to catch either type of degradation
             # Label-flip often shows high loss spike even with moderate acc drop

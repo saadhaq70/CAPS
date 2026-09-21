@@ -98,7 +98,7 @@ bash run_unified.sh
 - Model capacity: 32 → 64 neurons
 - Adam optimizer with weight decay
 - Training: 3 → 15 rounds, 3 → 5 local epochs
-- Expected accuracy: **85-90%** (up from 60-67%)
+- Expected accuracy: **78-88%** (typical: 80-85%, up from 60-67%)
 
 ### 2. ✅ Bug Fixes
 - Fixed recovery counter (was always 0)
@@ -117,7 +117,7 @@ bash run_unified.sh
 
 The unified dashboard is now:
 - ✅ **Bug-free** - All errors fixed
-- ✅ **High accuracy** - 85-90% expected
+- ✅ **Improved accuracy** - 78-88% expected (typical 80-85%)
 - ✅ **Feature-complete** - All visualizations working
 - ✅ **Production-ready** - Stable and reliable
 

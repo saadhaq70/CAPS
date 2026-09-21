@@ -12,7 +12,7 @@ from pathlib import Path
 
 from clients.data_loader import HeartDiseaseDataLoader
 from clients.client import get_client_fn, HeartDiseaseNet, get_model_parameters
-from aggregation.strategy import FedAvgStrategy
+from aggregation.strategy import FedAvgStrategy, AdaptiveStrategy
 from attacks.base import AttackConfig
 from attacks.client_factory import get_client_fn_with_attacks
 
@@ -76,6 +76,16 @@ def main():
     else:
         print("  - Attack: disabled (clean Phase 1 baseline)")
     
+    # Parse self-healing config (Phase 3 addition; safe when self_healing.enabled = false)
+    self_healing_cfg = config.get("self_healing", {})
+    self_healing_enabled = self_healing_cfg.get("enabled", False)
+    if self_healing_enabled:
+        print(f"  - Self-Healing: ENABLED")
+        print(f"    - DPS Threshold: {self_healing_cfg.get('dps_threshold', 0.55)}")
+        print(f"    - Recovery Rounds: {self_healing_cfg.get('recovery_rounds', 3)}")
+    else:
+        print("  - Self-Healing: disabled")
+    
     # Load and partition dataset
     print("\n[2/5] Loading and partitioning UCI Heart Disease dataset...")
     data_loader = HeartDiseaseDataLoader(
@@ -117,19 +127,49 @@ def main():
         mal_ids = [cid for cid, bad in ground_truth.items() if bad]
         print(f"  - Ground-truth malicious IDs (for Phase 3 scoring): {mal_ids}")
     
-    # Configure FedAvg strategy
-    print("\n[5/5] Configuring FedAvg aggregation strategy...")
-    strategy_wrapper = FedAvgStrategy(
-        test_data=test_data,
-        config=config,
-        fraction_fit=config["fraction_fit"],
-        fraction_evaluate=config["fraction_evaluate"],
-        min_fit_clients=config["min_fit_clients"],
-        min_evaluate_clients=config["min_evaluate_clients"],
-        min_available_clients=config["min_available_clients"]
-    )
-    strategy = strategy_wrapper.get_strategy()
-    print(f"  - Strategy: FedAvg (non-robust baseline)")
+    # Configure aggregation strategy (adaptive when self-healing enabled, FedAvg otherwise)
+    print("\n[5/5] Configuring aggregation strategy...")
+    
+    if self_healing_enabled:
+        # Use AdaptiveStrategy with DPS-based trust and quarantine
+        print(f"  - Strategy: AdaptiveStrategy (DPS-aware with self-healing)")
+        strategy_wrapper = AdaptiveStrategy(
+            test_data=test_data,
+            config=config,
+            fraction_fit=config["fraction_fit"],
+            fraction_evaluate=config["fraction_evaluate"],
+            min_fit_clients=config["min_fit_clients"],
+            min_evaluate_clients=config["min_evaluate_clients"],
+            min_available_clients=config["min_available_clients"],
+            self_healing_enabled=True
+        )
+        strategy = strategy_wrapper
+        
+        # NOTE: For full self-healing integration, you would need to:
+        # 1. Import HealthMonitor and SelfHealingController
+        # 2. Initialize DPS calculator with validation data
+        # 3. Hook into aggregate_fit to update client scores each round
+        # 4. This requires custom Flower server implementation
+        #
+        # For now, AdaptiveStrategy is ready but requires external score updates
+        # (as demonstrated in unified_dashboard.py via DashboardSimulator)
+        
+        print(f"  - Note: Full CLI self-healing integration requires custom Flower server")
+        print(f"  - Use unified_dashboard.py for complete self-healing demonstration")
+    else:
+        # Use plain FedAvg (Phase 1/2 behavior)
+        print(f"  - Strategy: FedAvg (non-robust baseline)")
+        strategy_wrapper = FedAvgStrategy(
+            test_data=test_data,
+            config=config,
+            fraction_fit=config["fraction_fit"],
+            fraction_evaluate=config["fraction_evaluate"],
+            min_fit_clients=config["min_fit_clients"],
+            min_evaluate_clients=config["min_evaluate_clients"],
+            min_available_clients=config["min_available_clients"]
+        )
+        strategy = strategy_wrapper.get_strategy()
+    
     print(f"  - Server-side evaluation enabled on global test set")
     
     # Start federated learning simulation
@@ -172,14 +212,16 @@ def main():
                 print(f"  Round {round_num}: {acc:.4f}")
     
     print("\n" + "=" * 80)
-    if attack_config.enabled:
+    if self_healing_enabled:
+        print("Phase 3 Complete: Self-healing FL simulation with AdaptiveStrategy")
+        print("Note: For full self-healing with DPS detection, use:")
+        print("  bash run_unified.sh")
+    elif attack_config.enabled:
         print(f"Phase 2 Complete: Attack simulation [{attack_config.attack_type}] done.")
     else:
         print("Phase 1/2 Complete: Baseline FL simulation successful!")
-    print("Next Steps (Phase 3):")
-    print("  - Implement Dynamic Poisoning Score (DPS) metrics")
-    print("  - Add robust aggregation strategies (Krum, Trimmed Mean)")
-    print("  - Build adaptive recovery controller")
+    print("Next Steps:")
+    print("  - Run 'bash run_unified.sh' for complete self-healing demo with DPS")
     print("  - Run 'python attack_demo.py' to benchmark all four attack types")
     print("=" * 80)
     

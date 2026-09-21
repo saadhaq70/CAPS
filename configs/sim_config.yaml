@@ -75,7 +75,7 @@ self_healing:
   # Health monitoring thresholds
   accuracy_drop_threshold: 0.15  # Trigger if accuracy drops by this amount
   loss_spike_threshold: 0.3      # Trigger if loss spikes by this fraction
-  dps_threshold: 2.0             # Max DPS before flagging as suspicious
+  dps_threshold: 0.55            # IMPROVED: Lowered from 2.0 to 0.55 for better label-flip detection
   suspicious_fraction_threshold: 0.3  # Fraction of suspicious clients to trigger
   model_drift_threshold: 5.0     # L2 distance threshold for model drift
   baseline_window: 3             # Rolling window for baseline calculation

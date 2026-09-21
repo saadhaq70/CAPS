@@ -1,4 +1,16 @@
 """
+⚠️ DEPRECATED: This dashboard is deprecated and for visual reference only.
+
+Please use the unified dashboard instead:
+    bash run_unified.sh
+
+The unified dashboard has:
+- All the visual design from this file
+- Real DPS computation and self-healing functionality
+- Fixed bugs and complete features
+
+---
+
 CAPS // ASH-FL Federated Learning Command Console
 UI Design: Cyber HUD inspired by khaledoghli.com (Orbitron, Space Grotesk, Neon Glassmorphism)
 """
@@ -291,6 +303,24 @@ st.markdown("""
     </div>
 </div>
 """, unsafe_allow_html=True)
+
+# DEPRECATION BANNER
+st.warning("""
+⚠️ **DEPRECATED DASHBOARD** - This is a visual demo with simulated data.
+
+**Use the unified dashboard instead:**
+```bash
+bash run_unified.sh
+```
+
+The unified dashboard has:
+- ✅ All visual design from this file
+- ✅ Real DPS computation and self-healing
+- ✅ Fixed bugs and complete features
+- ✅ Actual simulation with recovery tracking
+""")
+
+st.markdown("---")
 
 
 # ==============================================================================
