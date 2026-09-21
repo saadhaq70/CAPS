@@ -163,6 +163,193 @@ class FedAvgStrategy:
         return self.strategy
 
 
+class AdaptiveStrategy(FedAvg):
+    """
+    Adaptive Federated Averaging with DPS-based Trust and Self-Healing.
+    
+    Extends FedAvg to integrate:
+    - DPS (Deviation-Performance Score) based trust weights
+    - Quarantine multipliers for malicious clients
+    - Checkpoint restoration for self-healing
+    
+    When self-healing is disabled, behaves identically to plain FedAvg.
+    """
+    
+    def __init__(
+        self,
+        test_data: Tuple[np.ndarray, np.ndarray],
+        config: Dict,
+        fraction_fit: float = 0.5,
+        fraction_evaluate: float = 0.5,
+        min_fit_clients: int = 5,
+        min_evaluate_clients: int = 5,
+        min_available_clients: int = 5,
+        self_healing_enabled: bool = True
+    ):
+        """
+        Initialize Adaptive Strategy.
+        
+        Args:
+            test_data: Global test set for server-side evaluation
+            config: Configuration dictionary
+            fraction_fit: Fraction of clients to sample for training
+            fraction_evaluate: Fraction of clients to sample for evaluation
+            min_fit_clients: Minimum clients needed for training
+            min_evaluate_clients: Minimum clients needed for evaluation
+            min_available_clients: Minimum clients that must be available
+            self_healing_enabled: Enable DPS-based adaptive weights and quarantine
+        """
+        self.config = config
+        self.test_data = test_data
+        self.self_healing_enabled = self_healing_enabled
+        
+        # Adaptive weights state
+        self.dps_scores: Dict[int, float] = {}
+        self.trust_scores: Dict[int, float] = {}
+        self.quarantine_multipliers: Dict[int, float] = {}
+        self.restored_parameters: Optional[NDArrays] = None
+        
+        # Create server-side evaluation function
+        evaluate_fn = get_evaluate_fn(test_data, config)
+        
+        # Initialize base FedAvg strategy
+        super().__init__(
+            fraction_fit=fraction_fit,
+            fraction_evaluate=fraction_evaluate,
+            min_fit_clients=min_fit_clients,
+            min_evaluate_clients=min_evaluate_clients,
+            min_available_clients=min_available_clients,
+            evaluate_fn=evaluate_fn,
+            fit_metrics_aggregation_fn=weighted_average,
+            evaluate_metrics_aggregation_fn=weighted_average,
+            initial_parameters=None,
+        )
+    
+    def update_client_scores(
+        self,
+        dps_scores: Dict[int, float],
+        trust_scores: Dict[int, float],
+        quarantine_multipliers: Dict[int, float]
+    ):
+        """
+        Update DPS, trust, and quarantine scores from external detector.
+        
+        Args:
+            dps_scores: Client ID -> DPS score (0-1, higher = more suspicious)
+            trust_scores: Client ID -> trust score (0-1, higher = more trustworthy)
+            quarantine_multipliers: Client ID -> weight multiplier (0.05-1.0)
+        """
+        self.dps_scores = dps_scores.copy()
+        self.trust_scores = trust_scores.copy()
+        self.quarantine_multipliers = quarantine_multipliers.copy()
+    
+    def set_restored_parameters(self, parameters: Optional[NDArrays]):
+        """
+        Set restored parameters from checkpoint for self-healing.
+        
+        Args:
+            parameters: Restored model parameters, or None to clear
+        """
+        self.restored_parameters = parameters
+    
+    def aggregate_fit(
+        self,
+        server_round: int,
+        results: List[Tuple[fl.server.client_proxy.ClientProxy, fl.common.FitRes]],
+        failures: List[Union[Tuple[fl.server.client_proxy.ClientProxy, fl.common.FitRes], BaseException]],
+    ) -> Tuple[Optional[NDArrays], Dict[str, Scalar]]:
+        """
+        Aggregate client updates with adaptive weights based on DPS/trust/quarantine.
+        
+        Args:
+            server_round: Current round number
+            results: List of (ClientProxy, FitRes) tuples
+            failures: List of failed clients
+            
+        Returns:
+            Tuple of (aggregated_parameters, metrics_dict)
+        """
+        # If checkpoint was restored, use it directly (skip aggregation this round)
+        if self.restored_parameters is not None:
+            print(f"[Round {server_round}] Using restored checkpoint parameters")
+            restored = self.restored_parameters
+            self.restored_parameters = None  # Clear after use
+            return restored, {}
+        
+        # If self-healing disabled, use plain FedAvg
+        if not self.self_healing_enabled:
+            return super().aggregate_fit(server_round, results, failures)
+        
+        # Extract client IDs and parameters
+        weights_results = []
+        for client_proxy, fit_res in results:
+            # Get client ID (from proxy cid attribute)
+            try:
+                client_id = int(client_proxy.cid)
+            except (AttributeError, ValueError):
+                # Fallback: use equal weights if client ID unavailable
+                client_id = -1
+            
+            # Base weight from number of samples
+            num_samples = fit_res.num_examples
+            
+            # Apply adaptive weighting if scores available
+            if client_id in self.trust_scores and client_id in self.quarantine_multipliers:
+                trust = self.trust_scores[client_id]
+                quarantine_mult = self.quarantine_multipliers[client_id]
+                
+                # Combine trust and quarantine
+                # Trust score [0,1] already reflects DPS influence
+                # Quarantine multiplier [0.05, 1.0] applies penalty
+                adaptive_weight = trust * quarantine_mult
+                
+                # Final weight: samples * trust * quarantine
+                effective_weight = num_samples * adaptive_weight
+                
+                if adaptive_weight < 0.5:
+                    print(f"  Client {client_id}: samples={num_samples}, trust={trust:.3f}, "
+                          f"quarantine={quarantine_mult:.3f} → weight={effective_weight:.1f}")
+            else:
+                # No scores available, use sample count only
+                effective_weight = float(num_samples)
+            
+            weights_results.append((fit_res.parameters, effective_weight))
+        
+        # Aggregate with adaptive weights
+        if not weights_results:
+            return None, {}
+        
+        # Weighted average of parameters
+        total_weight = sum(w for _, w in weights_results)
+        
+        if total_weight == 0:
+            print(f"[Round {server_round}] Warning: Total weight is zero, using equal weights")
+            # Fallback to equal weights
+            total_weight = len(weights_results)
+            weights_results = [(params, 1.0) for params, _ in weights_results]
+        
+        # Convert parameters to arrays and aggregate
+        aggregated_arrays = None
+        for parameters, weight in weights_results:
+            arrays = fl.common.parameters_to_ndarrays(parameters)
+            
+            if aggregated_arrays is None:
+                aggregated_arrays = [arr * (weight / total_weight) for arr in arrays]
+            else:
+                aggregated_arrays = [
+                    agg + arr * (weight / total_weight)
+                    for agg, arr in zip(aggregated_arrays, arrays)
+                ]
+        
+        # Convert back to parameters format
+        aggregated_params = fl.common.ndarrays_to_parameters(aggregated_arrays)
+        
+        # Convert to NDArrays for return
+        aggregated_ndarrays = fl.common.parameters_to_ndarrays(aggregated_params)
+        
+        return aggregated_ndarrays, {}
+
+
 # Future extension point for robust strategies
 class RobustAggregationStrategy:
     """

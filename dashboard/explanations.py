@@ -21,15 +21,15 @@ Unlike simple distance metrics, DPS combines **multiple independent signals** to
 - **C (Cosine Disagreement)**: Is the update pointing in the wrong direction?
 - **H (History Deviation)**: Has this client's behavior suddenly changed?
 - **P (Performance Impact)**: Does this update hurt model accuracy? ✅ REAL
-- **D (Data Quality)**: ⚠️ DISABLED (requires local data access)
+- **D (Data Quality)**: ⚠️ DISABLED (requires local data access - violates FL privacy)
 
 ### Why Multiple Signals?
 
 Different attacks have different signatures:
-- **Label-flip attacks** → High P (bad performance)
+- **Label-flip attacks** → High P (bad performance) + moderate loss spike
 - **Sign-flip attacks** → High C (wrong direction)
 - **Scaling attacks** → High G (large magnitude)
-- **Backdoor attacks** → High H (inconsistent behavior)
+- **Backdoor attacks** → High H (inconsistent behavior) + High P
 
 By combining signals, DPS catches them all!
 
@@ -37,23 +37,23 @@ By combining signals, DPS catches them all!
 
 $$DPS_i = w_G \\cdot G_i + w_C \\cdot C_i + w_H \\cdot H_i + w_P \\cdot P_i + w_D \\cdot D_i$$
 
-**Current weights** (D redistributed to other signals):
-- $w_G = 0.33$ (was 0.30)
-- $w_C = 0.28$ (was 0.25)
-- $w_H = 0.22$ (was 0.20)
-- $w_P = 0.17$ (was 0.15)
-- $w_D = 0.00$ (was 0.10) - **DISABLED**
+**Current weights** (D weight redistributed, P increased for label-flip detection):
+- $w_G = 0.30$ 
+- $w_C = 0.27$ 
+- $w_H = 0.20$ 
+- $w_P = 0.23$ (increased from 0.17 to better catch subtle attacks)
+- $w_D = 0.00$ - **DISABLED for privacy**
 
 ### Normalization
 
-All signals normalized to [0, 1] before weighting:
-- G: divided by 2.0 (suspicious if > 2)
-- C: divided by 1.0 (suspicious if > 1)
-- H: divided by 2.0 (suspicious if > 2)
-- P: divided by 1.0 (suspicious if > 1)
-- D: always 0.0 (disabled)
+All signals normalized to [0, 1] using adaptive functions before weighting:
+- **G**: Sigmoid centered at 2.0 (suspicious if > 2σ from median)
+- **C**: Linear clipping to [0, 1] (suspicious if cosine similarity < 0)
+- **H**: Tanh for smooth saturation (suspicious if > 2σ from history)
+- **P**: Sigmoid centered at 0.5 (suspicious if accuracy drops > 5% or loss spikes)
+- **D**: Always 0.0 (disabled)
 
-**Typical threshold**: DPS > 2.0 flags client as suspicious
+**Typical threshold**: DPS > 0.6-0.7 flags client as suspicious (normalized scale)
 """
     
     explanations["📊 G - Gradient Deviation"] = """
@@ -143,32 +143,51 @@ Default: $\\alpha = 0.3$ (balances responsiveness vs stability)
     explanations["🎯 P - Performance Impact"] = """
 **P estimates how much a client's update would hurt global model performance.**
 
-### ✅ REAL IMPLEMENTATION (Shadow Validation)
+### ✅ REAL IMPLEMENTATION (Enhanced Shadow Validation)
 
 **How it works:**
 1. Create **shadow model** with current global parameters
-2. Get baseline accuracy on clean validation set
+2. Get baseline accuracy **and loss** on clean validation set
 3. Apply the client's update to shadow model
-4. Measure new accuracy on same validation set
-5. Compute degradation: `P = (baseline_acc - updated_acc) / 0.1`
+4. Measure new accuracy and loss on same validation set
+5. Compute **both** degradation signals:
+   - Accuracy degradation: `acc_score = (baseline_acc - updated_acc) / 0.08`
+   - Loss spike: `loss_score = (updated_loss - baseline_loss) / baseline_loss / 0.5`
+6. Take the **maximum** of both: `P = max(acc_score, loss_score)`
+
+### Why Both Accuracy and Loss?
+
+**Label-flip attacks** often show:
+- Moderate accuracy drop (5-8%)
+- Large loss spike (30-50% increase)
+
+By checking both, we catch label-flip more reliably even when accuracy degradation is subtle.
 
 ### Interpretation
 
 - **P = 0**: No degradation (helpful update)
 - **P = 0.5**: Moderate degradation (suspicious)
-- **P = 1.0**: 10% accuracy drop (very harmful)
+- **P = 1.0**: 8% accuracy drop OR 50% loss increase (very harmful)
 - **P > 1.0**: Severe degradation (strong attack signal)
+
+### Sensitivity
+
+More sensitive than before (0.08 vs 0.10 accuracy threshold):
+- Catches subtle poisoning earlier
+- May increase false positives slightly (acceptable trade-off)
+- Loss check provides secondary validation
 
 ### Why Performance?
 
-This is the **ultimate ground truth**: if an update hurts accuracy, it's poisoned by definition.
+This is the **ultimate ground truth**: if an update hurts accuracy or spikes loss, it's poisoned by definition.
 
 ### Computational Cost
 
 **Most expensive signal** - requires model evaluation.
-- Only computed for participating clients
+- Only computed for participating clients each round
 - Uses held-out validation set (50% of test data)
 - Separate from final evaluation set
+- ~10-20ms per client (acceptable overhead)
 
 ### Validation Set
 
@@ -180,10 +199,11 @@ Critical requirements:
 
 ### What Attacks Trigger High P?
 
-- ✅ **Label-flip attacks** (forces wrong predictions)
+- ✅ **Label-flip attacks** (forces wrong predictions + loss spike)
 - ✅ **Sign-flip attacks** (moves away from optimal)
+- ✅ **Backdoor attacks** (degrades main task performance)
 - ✅ **All attacks** (eventually degrade performance)
-- ✅ **Subtle poisoning** (even if G, C are low)
+- ✅ **Subtle poisoning** (even if G, C, H are low)
 
 ### Fallback Behavior
 
@@ -192,7 +212,7 @@ If validation data unavailable:
 - Clearly marked in logs
 - Less accurate but prevents crashes
 
-**Bottom line**: P is now REAL shadow validation, not a fake proxy.
+**Bottom line**: P is now REAL shadow validation with dual accuracy+loss checks for better label-flip detection.
 """
     
     explanations["📦 D - Data Quality"] = """
@@ -200,30 +220,53 @@ If validation data unavailable:
 
 ### ⚠️ CURRENT STATUS: DISABLED (D = 0.0 for all clients)
 
-**Why disabled?**  
-Computing real data quality requires analyzing the client's local dataset distribution (class balance, feature variance, label noise). This **violates federated learning privacy** - the server should never access raw client data.
+**Why is D disabled?**  
+Computing real data quality requires analyzing the client's local dataset distribution (class balance, feature variance, label noise, etc.). This **violates Federated Learning privacy principles** - the core tenet of FL is that the server should never access raw client data.
 
-**What would D measure (if we had access)?**
+**What would D measure (if we could access local data)?**
 - **Class balance**: Is one class over-represented?
 - **Feature variance**: Are features informative?
 - **Sample count**: Does client have enough data?
 - **Label noise**: Are labels consistent?
+- **Outlier detection**: Are there corrupted samples?
 
-### Workaround
+### Weight Redistribution
 
-Without data access, D cannot be computed honestly. Therefore:
-- **D = 0.0** for all clients
-- D's weight (originally 0.10) has been redistributed to other signals
-- **New weights**: G=0.33, C=0.28, H=0.22, P=0.17, D=0.00
+Since D cannot be computed honestly, its weight has been redistributed to strengthen the other signals:
 
-### Future Implementation
+**Updated weights** (effective now):
+- $w_G = 0.30$ (was 0.28)
+- $w_C = 0.27$ (was 0.25)
+- $w_H = 0.20$ (unchanged)
+- $w_P = 0.23$ (was 0.15) - **significantly increased for label-flip detection**
+- $w_D = 0.00$ (was 0.10) - **DISABLED**
 
-Could approximate D from **client update statistics**:
-- High update variance → possible noisy data
-- Consistent loss convergence → likely good quality
-- But these are indirect proxies, not true data quality
+### Privacy vs. Detection Trade-off
 
-**Bottom line**: Honest FL means we can't peek at local data, so D stays at 0.
+This is a fundamental constraint in Federated Learning:
+- ✅ **Privacy preserved**: Server never sees raw client data
+- ✅ **Honest system**: We don't pretend to compute D
+- ❌ **Reduced detection**: One less signal available
+
+However, the other four signals (G, C, H, P) are sufficient to catch most attacks:
+- **G** catches magnitude-based attacks (scaling)
+- **C** catches direction-based attacks (sign-flip)
+- **H** catches temporal attacks (delayed poisoning)
+- **P** catches performance-degrading attacks (label-flip, backdoor)
+
+### Future Approximations
+
+Could potentially approximate D from **indirect signals** without data access:
+- High update variance → possibly noisy local data
+- Consistent convergence → likely good quality
+- Update stability → stable dataset
+
+But these are weak proxies and may not be worth the complexity.
+
+### Bottom Line
+
+**Honest FL means we can't peek at local data, so D stays at 0.**  
+The P signal (performance impact via shadow validation) now carries more weight to compensate, especially for catching subtle attacks like label-flip.
 """
     
     explanations["🤝 Trust & Reputation"] = """

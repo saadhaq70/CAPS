@@ -34,6 +34,43 @@ st.set_page_config(
 )
 
 # ==============================================================================
+# ⚠️ VISUAL DEMO MODE WARNING
+# ==============================================================================
+st.markdown("""
+<div style="
+    background: linear-gradient(135deg, #ff6b35 0%, #f7931e 100%);
+    border: 3px solid #ff6b35;
+    border-radius: 12px;
+    padding: 20px 24px;
+    margin: 20px 0 30px 0;
+    box-shadow: 0 8px 32px rgba(255, 107, 53, 0.4);
+    animation: pulse-warning 2s ease-in-out infinite;
+">
+    <div style="display: flex; align-items: center; gap: 16px;">
+        <div style="font-size: 3rem;">⚠️</div>
+        <div>
+            <h2 style="margin: 0 0 8px 0; color: #ffffff; font-size: 1.5rem; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">
+                VISUAL DEMO MODE
+            </h2>
+            <p style="margin: 0; color: #ffffff; font-size: 1.05rem; line-height: 1.5;">
+                <strong>This interface displays illustrative animations and placeholder metrics only.</strong><br/>
+                For <strong>real detection, DPS computation, and self-healing</strong>, please use:<br/>
+                👉 <code style="background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px; font-weight: bold;">dashboard_app.py</code> 
+                (run: <code style="background: rgba(255,255,255,0.2); padding: 4px 8px; border-radius: 4px;">bash run_dashboard.sh</code>)
+            </p>
+        </div>
+    </div>
+</div>
+
+<style>
+@keyframes pulse-warning {
+    0%, 100% { box-shadow: 0 8px 32px rgba(255, 107, 53, 0.4); }
+    50% { box-shadow: 0 8px 48px rgba(255, 107, 53, 0.7); }
+}
+</style>
+""", unsafe_allow_html=True)
+
+# ==============================================================================
 # Cyber HUD Stylesheet (khaledoghli.com inspired)
 # ==============================================================================
 st.markdown("""
