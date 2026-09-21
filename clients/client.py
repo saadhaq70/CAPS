@@ -14,24 +14,34 @@ from collections import OrderedDict
 
 
 class HeartDiseaseNet(nn.Module):
-    """Lightweight neural network for binary classification on tabular data."""
+    """
+    Improved neural network for binary classification on tabular data.
     
-    def __init__(self, input_dim: int = 13, hidden_dim: int = 32, output_dim: int = 1):
+    Architecture: Input → 64 → 32 → 1 (with ReLU activations)
+    Uses deeper capacity for better feature learning.
+    """
+    
+    def __init__(self, input_dim: int = 13, hidden_dim: int = 64, output_dim: int = 1):
         """
         Initialize neural network.
         
         Args:
-            input_dim: Number of input features
-            hidden_dim: Number of hidden layer neurons
+            input_dim: Number of input features (13 for Heart Disease)
+            hidden_dim: Number of neurons in first hidden layer (default: 64)
             output_dim: Number of output neurons (1 for binary classification)
         """
         super(HeartDiseaseNet, self).__init__()
+        
+        # Two hidden layers for increased capacity
+        # 13 → 64 → 32 → 1
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),
+            nn.Dropout(0.2),  # Light dropout for regularization
+            nn.Linear(hidden_dim, hidden_dim // 2),
             nn.ReLU(),
-            nn.Linear(hidden_dim, output_dim),
+            nn.Dropout(0.2),
+            nn.Linear(hidden_dim // 2, output_dim),
             nn.Sigmoid()
         )
     
@@ -71,7 +81,8 @@ def train_model(
     train_loader: DataLoader,
     epochs: int,
     learning_rate: float,
-    device: torch.device
+    device: torch.device,
+    optimizer_type: str = "adam"
 ) -> Tuple[int, float]:
     """
     Train model on local client data.
@@ -82,6 +93,7 @@ def train_model(
         epochs: Number of local training epochs
         learning_rate: Learning rate for optimizer
         device: Device to train on (cpu or cuda)
+        optimizer_type: Type of optimizer ("adam" or "sgd")
         
     Returns:
         Tuple of (num_samples, average_loss)
@@ -90,7 +102,21 @@ def train_model(
     model.train()
     
     criterion = nn.BCELoss()
-    optimizer = optim.SGD(model.parameters(), lr=learning_rate)
+    
+    # Use Adam optimizer with weight decay for better convergence
+    if optimizer_type.lower() == "adam":
+        optimizer = optim.Adam(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=1e-5,  # L2 regularization
+            betas=(0.9, 0.999)
+        )
+    else:
+        optimizer = optim.SGD(
+            model.parameters(),
+            lr=learning_rate,
+            weight_decay=1e-5
+        )
     
     total_loss = 0.0
     num_batches = 0
@@ -177,7 +203,8 @@ class HeartDiseaseClient(fl.client.NumPyClient):
         output_dim: int,
         batch_size: int,
         learning_rate: float,
-        local_epochs: int
+        local_epochs: int,
+        optimizer_type: str = "adam"
     ):
         """
         Initialize federated client.
@@ -192,6 +219,7 @@ class HeartDiseaseClient(fl.client.NumPyClient):
             batch_size: Batch size for training
             learning_rate: Learning rate
             local_epochs: Number of local epochs per round
+            optimizer_type: Optimizer type ("adam" or "sgd")
         """
         self.cid = cid
         self.input_dim = input_dim
@@ -200,6 +228,7 @@ class HeartDiseaseClient(fl.client.NumPyClient):
         self.batch_size = batch_size
         self.learning_rate = learning_rate
         self.local_epochs = local_epochs
+        self.optimizer_type = optimizer_type
         
         # Initialize model
         self.model = HeartDiseaseNet(input_dim, hidden_dim, output_dim)
@@ -239,13 +268,14 @@ class HeartDiseaseClient(fl.client.NumPyClient):
         # Update local model with global parameters
         set_model_parameters(self.model, parameters)
         
-        # Train on local data
+        # Train on local data with improved optimizer
         num_samples, loss = train_model(
             self.model,
             self.train_loader,
             self.local_epochs,
             self.learning_rate,
-            self.device
+            self.device,
+            self.optimizer_type
         )
         
         # Return updated model parameters and metrics
@@ -308,7 +338,8 @@ def get_client_fn(
             output_dim=config["output_dim"],
             batch_size=config["batch_size"],
             learning_rate=config["learning_rate"],
-            local_epochs=config["local_epochs"]
+            local_epochs=config["local_epochs"],
+            optimizer_type=config.get("optimizer_type", "adam")  # Default to Adam
         )
     
     return client_fn

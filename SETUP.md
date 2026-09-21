@@ -1,72 +1,120 @@
-# Setup & Run
+# Setup & Installation
 
-## Installation
+## Requirements
+
+- Python 3.8+
+- pip
+
+## Install
 
 ```bash
 pip install -r requirements.txt
 ```
 
-Required: `torch`, `flwr`, `ucimlrepo`, `sklearn`, `pyyaml`, `numpy`, `pandas`
+Installs: torch, flwr, streamlit, plotly, numpy, pandas, scikit-learn, pyyaml, ucimlrepo
 
-## Run
+## Verify
 
 ```bash
-# Verify installation
-python test_setup.py
+python tests/test_setup.py
+```
 
-# Quick demo (2 min)
-python demo_quick.py
+Should print "✅ Setup successful!"
 
-# Full simulation (5-10 min)
+## Run Dashboard
+
+```bash
+bash run_dashboard.sh
+```
+
+Opens at `http://localhost:8501`
+
+## Run Simulations
+
+```bash
+# Clean baseline
 python main.py
+
+# All attacks
+python tests/attack_demo.py
+
+# Self-healing
+python tests/self_healing_demo.py
+
+# Real-time integrated
+python realtime_simulation.py
 ```
 
-## Expected Output
+## Run Tests
 
+```bash
+bash run_all_tests.sh                 # All tests
+python tests/test_phase3.py           # Unit tests
+python tests/test_comprehensive.py    # Comprehensive
+python tests/test_integration.py      # Integration
 ```
-[Round 1] Server-side evaluation - Loss: 0.XXXX, Accuracy: 0.XXXX
-[Round 2] ...
-[Round 5] ...
 
-Final Accuracy: 0.XXXX (should improve over rounds)
+## Configuration
+
+Edit `configs/sim_config.yaml`:
+
+```yaml
+num_rounds: 10
+num_clients_total: 5
+
+attack:
+  enabled: true
+  attack_type: "sign_flip"
+  num_malicious_clients: 2
+
+self_healing:
+  enabled: true
+  dps_threshold: 2.0
+  recovery_rounds: 3
 ```
 
 ## Troubleshooting
 
-**Import errors**: Make sure you're in `/Users/saadansari/CAPS` directory
+**Dashboard won't start:**
+```bash
+pip install streamlit plotly --upgrade
+```
 
-**Slow performance**: Edit `configs/sim_config.yaml`, reduce `num_rounds` or `num_clients_total`
+**Import errors:**
+```bash
+pip install -r requirements.txt
+```
 
-**Dataset download fails**: Check internet, retry. Dataset auto-downloads from UCI repository first time only
+**Port 8501 busy:**
+```bash
+streamlit run dashboard_app.py --server.port 8502
+```
 
-## Configuration
+## Project Structure
 
-Edit `configs/sim_config.yaml` to change:
-- Number of rounds/clients
-- Learning rate, batch size, epochs
-- Model architecture (hidden_dim)
+```
+├── dashboard_app.py          # Main dashboard
+├── dashboard/                # Dashboard modules
+├── recovery/                 # Self-healing (Phase 3)
+├── attacks/                  # Attack implementations (Phase 2)
+├── clients/                  # FL clients & data
+├── aggregation/              # FedAvg strategy
+├── configs/                  # Configuration files
+├── tests/                    # All test files
+│   ├── test_setup.py
+│   ├── test_phase3.py
+│   ├── test_comprehensive.py
+│   ├── test_integration.py
+│   ├── attack_demo.py
+│   └── self_healing_demo.py
+├── main.py                   # Clean baseline
+└── realtime_simulation.py    # Real-time sim
+```
 
-## Dataset Location
+## Dataset
 
-Auto-downloaded from UCI (ID: 45) when first run. Cached by `ucimlrepo` package (usually `~/.cache/ucimlrepo/`). 297 samples, 13 features, binary classification.
-
-
-
-CAPS/
-├── README.md              # Quick overview
-├── SETUP.md              # How to install & run
-├── CHANGELOG.md          # Track changes
-├── requirements.txt      # Dependencies
-├── .gitignore           # Git ignore
-│
-├── main.py              # Run full simulation
-├── demo_quick.py        # Fast test
-├── test_setup.py        # Verify install
-│
-├── configs/
-│   └── sim_config.yaml  # All settings
-├── clients/
-│   ├── data_loader.py   # Dataset
-│   └── client.py        # Model + FL client
-└── aggregation/
-    └── strategy.py      # FedAvg
+UCI Heart Disease (ID: 45) - auto-downloaded on first run.
+- 297 samples, 13 features
+- Binary classification (disease/no disease)
+- Split: 80% train, 20% test
+- Partitioned IID across clients

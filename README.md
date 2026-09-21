@@ -1,81 +1,115 @@
-# ASH-FL: Federated Learning Simulator
+# ASH-FL: Adaptive Self-Healing Federated Learning
 
-## Quick Start
+Federated Learning with attacks, detection, and self-healing. **NEW: Unified Cyber HUD Dashboard** with real functionality.
 
+## 🚀 Quick Start
+
+**Recommended: Use the Unified Dashboard**
 ```bash
-# Install
+# Install dependencies
 pip install -r requirements.txt
 
-# Verify
-python test_setup.py
-
-# Phase 1 — clean baseline (5-10 min)
-python main.py
-
-# Phase 2 — attack demo (all four attack types back-to-back)
-python attack_demo.py
+# Launch unified dashboard (opens at http://localhost:8501)
+bash run_unified.sh
 ```
 
-## What It Does
+**Other options (for specific purposes):**
+```bash
+# System test (verify all components)
+python3 tests/test_system.py
 
-- **Dataset**: UCI Heart Disease (auto-downloaded, 297 samples, 13 features)
-- **Model**: 3-layer neural network (13→32→32→1)
-- **FL Setup**: 5 clients, 3 rounds, FedAvg aggregation
-- **Privacy**: Server never sees raw data, only model weights
+# CLI simulations (for scripting/automation)
+python main.py                            # Clean baseline
+python tests/attack_demo.py               # All 4 attacks
+python tests/self_healing_demo.py         # Self-healing demo
+
+# OLD DASHBOARDS (DEPRECATED - use unified dashboard instead)
+# bash run_dashboard.sh                   # Plain UI, broken recovery counter
+# streamlit run app.py                    # Beautiful UI, fake numbers
+```
+
+## ✨ Unified Dashboard
+
+**Launch:** `bash run_unified.sh`
+
+Features:
+- 🎨 Cyber HUD design (neon glassmorphism)
+- 🎯 Real DPS (G, C, H, P with shadow validation)
+- 🛡️ Self-healing FSM with automatic recovery
+- 📊 Network topology, accuracy analysis, aggregation weights
+- ⚙️ Per-client attack configuration
+
+## What's Included
+
+- **FL Baseline**: FedAvg on UCI Heart Disease dataset
+- **4 Attacks**: label_flip, sign_flip, scaling, backdoor
+- **DPS Detection**: Real-time G, C, H, P scores (D disabled for privacy)
+- **Self-Healing**: FSM-based recovery with checkpoints
+- **Unified Dashboard**: Cyber HUD + real simulation ⭐
+- **Tests**: 20 tests, all passing
+
+## Dashboard Features
+
+- **Real DPS**: G (gradient), C (cosine), H (history), P (performance), D (disabled)
+- **Attacks**: 4 types with per-client configuration
+- **Self-Healing**: Automatic detection → quarantine → recovery
+- **Visualization**: Network topology, DPS radar, trust evolution, aggregation weights
+- **Cyber HUD**: Orbitron font, neon colors, glassmorphism
 
 ## Files
 
 ```
-configs/sim_config.yaml        - Hyperparameters + attack config block
+configs/sim_config.yaml        - Hyperparameters + attack + self-healing config
 clients/data_loader.py         - Dataset loading & IID partitioning
 clients/client.py              - PyTorch model + Flower client
-aggregation/strategy.py        - FedAvg aggregation (unchanged)
-attacks/__init__.py            - Attack package & registry
-attacks/base.py                - AttackConfig dataclass + BaseAttack ABC
-attacks/label_flip.py          - Label-flipping attack
-attacks/sign_flip.py           - Sign-flipping (gradient reversal) attack
-attacks/scaling.py             - Update scaling / amplification attack
-attacks/backdoor.py            - Backdoor (trigger injection) attack
-attacks/malicious_client.py    - MaliciousClient wrapping HeartDiseaseClient
-attacks/client_factory.py      - Extended factory with ground-truth labels
-main.py                        - Run simulation (clean or attacked)
-attack_demo.py                 - Phase 2 benchmark: baseline vs 4 attacks
-demo_quick.py                  - Fast sanity-check (Phase 1)
+aggregation/strategy.py        - FedAvg aggregation
+attacks/                       - Attack implementations (Phase 2)
+recovery/                      - Self-healing layer (Phase 3)
+  ├── health_monitor.py        - Health tracking & degradation detection
+  ├── checkpoint_manager.py    - Save/restore trusted models
+  └── self_heal.py             - FSM recovery controller
+main.py                        - Run simulation
+attack_demo.py                 - Phase 2 benchmark
+self_healing_demo.py           - Phase 3 self-healing demo
 ```
 
-## How It Works (Simulation Mode)
-
-- Single Python process on your machine
-- No actual network/servers (Flower simulates it in memory)
-- Data partitioned at startup, clients created on-demand per round
-- Fast for research, not realistic network conditions
-
-## Enabling Attacks (Phase 2)
+## Configuration
 
 Edit `configs/sim_config.yaml`:
+
+**Training:**
+```yaml
+num_rounds: 15
+local_epochs: 5
+hidden_dim: 64
+optimizer_type: "adam"
+```
+
+**Attacks:**
 ```yaml
 attack:
   enabled: true
-  attack_type: "label_flip"    # label_flip | sign_flip | scaling | backdoor
-  num_malicious_clients: 1
-  source_label: 0
-  target_label: 1
+  attack_type: "label_flip"
+  num_malicious_clients: 2
 ```
-Then run `python main.py` — clean behaviour is restored by setting `enabled: false`.
 
-## Customize
-
-Edit `configs/sim_config.yaml`:
+**Self-Healing:**
 ```yaml
-num_rounds: 5              # Change FL rounds
-num_clients_total: 5       # Change total clients
-learning_rate: 0.01        # Adjust learning rate
-local_epochs: 3            # Local training epochs
+self_healing:
+  enabled: true
+  dps_threshold: 0.55
+  recovery_rounds: 3
 ```
 
-## Next: Phase 3 (DPS + Robust Aggregation)
+## Expected Results
 
-1. Implement Dynamic Poisoning Score (DPS) — per-client anomaly metric
-2. Use `ground_truth` dict from `get_client_fn_with_attacks()` to measure detection accuracy
-3. Add robust aggregation strategies (Krum, Trimmed Mean, Coordinate-wise Median)
-4. Build adaptive recovery controller
+**Clean (no attacks):**
+- Final accuracy: 78-88% (typical: 80-85%)
+- Smooth convergence in ~10-12 rounds
+
+**With attacks + self-healing:**
+- Detection: DPS >0.55 for malicious clients
+- Recovery: 1-2 attempts triggered
+- Final accuracy: 75-85% (within 3-8% of clean)
+
+See `CHANGES.md` for recent improvements.
