@@ -27,7 +27,7 @@ class SelfHealingController:
     
     Recovery flow:
     1. Detect degradation (via HealthMonitor)
-    2. Identify suspicious clients (via DPS)
+    2. Identify suspicious clients (via DPS and persistent trust history)
     3. Restore last trusted checkpoint
     4. Quarantine suspicious clients (down-weight)
     5. Retrain for N rounds
@@ -56,7 +56,25 @@ class SelfHealingController:
             max_recovery_attempts: Max times to attempt recovery before giving up
         """
         self.config = config
-        self.health_monitor = health_monitor or HealthMonitor()
+        if health_monitor is not None:
+            self.health_monitor = health_monitor
+        else:
+            hm_kwargs = {}
+            for k in [
+                "accuracy_drop_threshold",
+                "loss_spike_threshold",
+                "dps_threshold",
+                "suspicious_fraction_threshold",
+                "model_drift_threshold",
+                "baseline_window",
+                "persistent_dps_threshold",
+                "persistent_trust_threshold",
+                "persistent_rounds",
+            ]:
+                if k in config:
+                    hm_kwargs[k] = config[k]
+            self.health_monitor = HealthMonitor(**hm_kwargs)
+
         self.checkpoint_manager = checkpoint_manager or CheckpointManager()
 
         self.recovery_rounds = recovery_rounds
@@ -93,7 +111,7 @@ class SelfHealingController:
             candidate_params: Aggregated model parameters
             metrics: Current round metrics
             dps_dict: Dynamic Poisoning Scores per client
-            reputation: Client reputation scores (optional)
+            reputation: Client reputation/trust scores (optional)
             client_updates: Raw client updates (optional, for future use)
 
         Returns:
@@ -103,7 +121,7 @@ class SelfHealingController:
         self._update_quarantine(round_num)
 
         # Check if model is healthy
-        is_healthy = self.health_monitor.is_healthy(metrics, dps_dict)
+        is_healthy = self.health_monitor.is_healthy(metrics, dps_dict, reputation)
 
         # Save checkpoint if healthy
         if is_healthy and self.state == HealingState.NORMAL:
@@ -115,22 +133,22 @@ class SelfHealingController:
         # FSM transitions
         if self.state == HealingState.NORMAL:
             return self._handle_normal_state(
-                round_num, candidate_params, metrics, dps_dict
+                round_num, candidate_params, metrics, dps_dict, reputation
             )
 
         elif self.state == HealingState.MONITOR:
             return self._handle_monitor_state(
-                round_num, candidate_params, metrics, dps_dict
+                round_num, candidate_params, metrics, dps_dict, reputation
             )
 
         elif self.state == HealingState.RECOVERY:
             return self._handle_recovery_state(
-                round_num, candidate_params, metrics, dps_dict
+                round_num, candidate_params, metrics, dps_dict, reputation
             )
 
         elif self.state == HealingState.VALIDATE:
             return self._handle_validate_state(
-                round_num, candidate_params, metrics, dps_dict
+                round_num, candidate_params, metrics, dps_dict, reputation
             )
 
         elif self.state == HealingState.RESUME:
@@ -144,11 +162,12 @@ class SelfHealingController:
         params: List[np.ndarray],
         metrics: Dict[str, float],
         dps_dict: Optional[Dict[int, float]],
+        reputation: Optional[Dict[int, float]] = None,
     ) -> Tuple[List[np.ndarray], str]:
         """Handle NORMAL state."""
         # Check if recovery should be triggered
         should_recover = self.health_monitor.should_trigger_recovery(
-            metrics, dps_dict, params
+            metrics, dps_dict, params, reputation=reputation
         )
 
         if should_recover:
@@ -167,6 +186,7 @@ class SelfHealingController:
         params: List[np.ndarray],
         metrics: Dict[str, float],
         dps_dict: Optional[Dict[int, float]],
+        reputation: Optional[Dict[int, float]] = None,
     ) -> Tuple[List[np.ndarray], str]:
         """Handle MONITOR state - verify degradation persists."""
         # Stay in monitor for 1 round to confirm
@@ -175,7 +195,7 @@ class SelfHealingController:
 
         # Check if still degraded
         still_degraded = self.health_monitor.should_trigger_recovery(
-            metrics, dps_dict, params
+            metrics, dps_dict, params, reputation=reputation
         )
 
         if not still_degraded:
@@ -186,7 +206,7 @@ class SelfHealingController:
         # Confirmed degradation - start recovery
         print(f"[SelfHealing] Round {round_num}: Degradation confirmed")
         print(f"  Transitioning MONITOR → RECOVERY")
-        self._initiate_recovery(round_num, metrics, dps_dict)
+        self._initiate_recovery(round_num, metrics, dps_dict, reputation=reputation)
         return self._execute_recovery(round_num)
 
     def _handle_recovery_state(
@@ -195,6 +215,7 @@ class SelfHealingController:
         params: List[np.ndarray],
         metrics: Dict[str, float],
         dps_dict: Optional[Dict[int, float]],
+        reputation: Optional[Dict[int, float]] = None,
     ) -> Tuple[List[np.ndarray], str]:
         """Handle RECOVERY state - retraining from checkpoint."""
         rounds_in_recovery = round_num - self.recovery_start_round
@@ -216,6 +237,7 @@ class SelfHealingController:
         params: List[np.ndarray],
         metrics: Dict[str, float],
         dps_dict: Optional[Dict[int, float]],
+        reputation: Optional[Dict[int, float]] = None,
     ) -> Tuple[List[np.ndarray], str]:
         """Handle VALIDATE state - check if recovery succeeded."""
         # Compare current metrics with pre-recovery
@@ -270,26 +292,28 @@ class SelfHealingController:
         round_num: int,
         metrics: Dict[str, float],
         dps_dict: Optional[Dict[int, float]],
+        reputation: Optional[Dict[int, float]] = None,
     ) -> None:
         """Initiate recovery process."""
         self.recovery_attempt_count += 1
         self.recovery_start_round = round_num
         self.pre_recovery_metrics = metrics.copy()
 
-        # Identify suspicious clients via DPS
+        # Identify suspicious clients via acute DPS and persistent history
         if dps_dict:
-            self._identify_suspicious_clients(round_num, dps_dict)
+            self._identify_suspicious_clients(round_num, dps_dict, reputation=reputation)
 
         print(f"[SelfHealing] Quarantined clients: {self.quarantined_clients}")
 
     def _identify_suspicious_clients(
-        self, round_num: int, dps_dict: Dict[int, float]
+        self,
+        round_num: int,
+        dps_dict: Dict[int, float],
+        reputation: Optional[Dict[int, float]] = None,
     ) -> None:
         """Identify and quarantine suspicious clients."""
-        # Sort clients by DPS (highest first)
+        # 1. Acute threshold check: sort clients by DPS (highest first)
         sorted_clients = sorted(dps_dict.items(), key=lambda x: x[1], reverse=True)
-
-        # Quarantine top clients above threshold
         threshold = self.health_monitor.dps_threshold
         for client_id, dps in sorted_clients:
             if dps > threshold:
@@ -297,6 +321,14 @@ class SelfHealingController:
                 self.quarantine_expiry[client_id] = (
                     round_num + self.quarantine_window
                 )
+
+        # 2. Persistent suspicious clients check (Option C)
+        persistent_clients = self.health_monitor.get_persistent_suspicious_clients(reputation)
+        for client_id in persistent_clients:
+            self.quarantined_clients.add(client_id)
+            self.quarantine_expiry[client_id] = (
+                round_num + self.quarantine_window
+            )
 
     def _expand_quarantine(self, dps_dict: Optional[Dict[int, float]]) -> None:
         """Expand quarantine to include more clients."""

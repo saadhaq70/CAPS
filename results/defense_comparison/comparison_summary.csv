@@ -1,0 +1,17 @@
+Attack,Defense,Type,Final Accuracy,Accuracy Drop,Final Loss,Backdoor ASR,Explicit Detection,Self-Healing,Recovery Status
+Label Flip,Multi-Krum,Robust Aggregation,90.0%,-3.3%,0.3223,N/A,N/A (Robust Agg),N/A,N/A
+Label Flip,Trimmed Mean,Robust Aggregation,86.7%,-3.3%,0.4020,N/A,N/A (Robust Agg),N/A,N/A
+Label Flip,FLTrust,Trust Weighted,83.3%,+0.0%,0.3608,N/A,N/A (Robust Agg),N/A,N/A
+Label Flip,ASH-FL,Self Healing,86.7%,-3.3%,0.3774,N/A,Available,YES (Autonomous FSM),Attempts: 0 | State: MONITOR
+Sign Flip,Multi-Krum,Robust Aggregation,86.7%,+0.0%,0.3959,N/A,N/A (Robust Agg),N/A,N/A
+Sign Flip,Trimmed Mean,Robust Aggregation,80.0%,+3.3%,0.5584,N/A,N/A (Robust Agg),N/A,N/A
+Sign Flip,FLTrust,Trust Weighted,83.3%,+0.0%,0.3610,N/A,N/A (Robust Agg),N/A,N/A
+Sign Flip,ASH-FL,Self Healing,86.7%,-3.3%,0.5276,N/A,Available,YES (Autonomous FSM),Attempts: 0 | State: MONITOR
+Scaling,Multi-Krum,Robust Aggregation,80.0%,+6.7%,9.8274,N/A,N/A (Robust Agg),N/A,N/A
+Scaling,Trimmed Mean,Robust Aggregation,50.0%,+33.3%,45.7705,N/A,N/A (Robust Agg),N/A,N/A
+Scaling,FLTrust,Trust Weighted,83.3%,+0.0%,0.3416,N/A,N/A (Robust Agg),N/A,N/A
+Scaling,ASH-FL,Self Healing,80.0%,+3.3%,16.8943,N/A,Available,YES (Autonomous FSM),Attempts: 1 | State: RECOVERY
+Backdoor,Multi-Krum,Robust Aggregation,86.7%,+0.0%,0.3291,13.3%,N/A (Robust Agg),N/A,N/A
+Backdoor,Trimmed Mean,Robust Aggregation,86.7%,-3.3%,0.3237,13.3%,N/A (Robust Agg),N/A,N/A
+Backdoor,FLTrust,Trust Weighted,83.3%,+0.0%,0.3482,13.3%,N/A (Robust Agg),N/A,N/A
+Backdoor,ASH-FL,Self Healing,83.3%,+0.0%,0.3366,13.3%,Available,YES (Autonomous FSM),Attempts: 0 | State: NORMAL

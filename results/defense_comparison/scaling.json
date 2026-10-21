@@ -1,0 +1,640 @@
+{
+  "attack_type": "scaling",
+  "config": {
+    "num_clients": 5,
+    "num_rounds": 3,
+    "local_epochs": 3,
+    "batch_size": 16,
+    "learning_rate": 0.01,
+    "random_seed": 42,
+    "dataset_id": 45,
+    "test_split": 0.2,
+    "iid": true,
+    "input_dim": 13,
+    "hidden_dim": 32,
+    "output_dim": 1,
+    "attack_type": "none",
+    "malicious_client_ids": [
+      1,
+      2
+    ],
+    "scale_factor": 50.0,
+    "source_label": 0,
+    "target_label": 1,
+    "trigger_feature_indices": [
+      0,
+      1
+    ],
+    "trigger_value": 1.0,
+    "poison_fraction": 0.3,
+    "backdoor_target_label": 1
+  },
+  "defense_results": {
+    "Multi-Krum": {
+      "defense_name": "Multi-Krum",
+      "attack_type": "scaling",
+      "initial_accuracy": 0.6666666666666666,
+      "initial_loss": 0.6841420531272888,
+      "per_round_accuracy": [
+        0.8,
+        0.9,
+        0.8
+      ],
+      "per_round_loss": [
+        12.053078651428223,
+        0.42153534293174744,
+        9.827439308166504
+      ],
+      "final_accuracy": 0.8,
+      "final_loss": 9.827439308166504,
+      "clean_accuracy": 0.8666666666666667,
+      "attacked_accuracy": 0.8,
+      "accuracy_degradation": 0.06666666666666665,
+      "backdoor_asr": null,
+      "per_round_backdoor_asr": null,
+      "defense_type": "robust_aggregation",
+      "supports_self_healing": false,
+      "supports_explicit_detection": false,
+      "per_round_defense_metrics": [
+        {
+          "selected_clients": [
+            3,
+            4,
+            0,
+            2
+          ],
+          "excluded_clients": [
+            1
+          ],
+          "krum_scores": {
+            "0": 6.091868877410889,
+            "1": 10926.8974609375,
+            "2": 9807.9638671875,
+            "3": 5.507665395736694,
+            "4": 6.009307146072388
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.0,
+            "2": 0.25,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        },
+        {
+          "selected_clients": [
+            3,
+            0,
+            4,
+            1
+          ],
+          "excluded_clients": [
+            2
+          ],
+          "krum_scores": {
+            "0": 5.436485528945923,
+            "1": 10968.044921875,
+            "2": 12586.6259765625,
+            "3": 5.396996021270752,
+            "4": 7.116246461868286
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.25,
+            "2": 0.0,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        },
+        {
+          "selected_clients": [
+            0,
+            3,
+            4,
+            2
+          ],
+          "excluded_clients": [
+            1
+          ],
+          "krum_scores": {
+            "0": 4.640245079994202,
+            "1": 11471.1396484375,
+            "2": 9359.86279296875,
+            "3": 4.668779730796814,
+            "4": 5.393146276473999
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.0,
+            "2": 0.25,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        }
+      ],
+      "recovery_metrics": {}
+    },
+    "Trimmed Mean": {
+      "defense_name": "Trimmed Mean",
+      "attack_type": "scaling",
+      "initial_accuracy": 0.6666666666666666,
+      "initial_loss": 0.6841420531272888,
+      "per_round_accuracy": [
+        0.8,
+        0.5,
+        0.5
+      ],
+      "per_round_loss": [
+        12.753171920776367,
+        44.33643341064453,
+        45.77045822143555
+      ],
+      "final_accuracy": 0.5,
+      "final_loss": 45.77045822143555,
+      "clean_accuracy": 0.8333333333333334,
+      "attacked_accuracy": 0.5,
+      "accuracy_degradation": 0.33333333333333337,
+      "backdoor_asr": null,
+      "per_round_backdoor_asr": null,
+      "defense_type": "robust_aggregation",
+      "supports_self_healing": false,
+      "supports_explicit_detection": false,
+      "per_round_defense_metrics": [
+        {
+          "trim_k": 1,
+          "effective_trim_fraction": 0.2,
+          "num_clients": 5,
+          "retained_per_coordinate": 3,
+          "participating_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "trim_k": 1,
+          "effective_trim_fraction": 0.2,
+          "num_clients": 5,
+          "retained_per_coordinate": 3,
+          "participating_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        },
+        {
+          "trim_k": 1,
+          "effective_trim_fraction": 0.2,
+          "num_clients": 5,
+          "retained_per_coordinate": 3,
+          "participating_clients": [
+            0,
+            1,
+            2,
+            3,
+            4
+          ]
+        }
+      ],
+      "recovery_metrics": {}
+    },
+    "FLTrust": {
+      "defense_name": "FLTrust",
+      "attack_type": "scaling",
+      "initial_accuracy": 0.6666666666666666,
+      "initial_loss": 0.6841420531272888,
+      "per_round_accuracy": [
+        0.8333333333333334,
+        0.8666666666666667,
+        0.8333333333333334
+      ],
+      "per_round_loss": [
+        0.5741206407546997,
+        0.39856472611427307,
+        0.34159544110298157
+      ],
+      "final_accuracy": 0.8333333333333334,
+      "final_loss": 0.34159544110298157,
+      "clean_accuracy": 0.8333333333333334,
+      "attacked_accuracy": 0.8333333333333334,
+      "accuracy_degradation": 0.0,
+      "backdoor_asr": null,
+      "per_round_backdoor_asr": null,
+      "defense_type": "trust_weighted",
+      "supports_self_healing": false,
+      "supports_explicit_detection": false,
+      "per_round_defense_metrics": [
+        {
+          "trust_scores": {
+            "0": 0.39393219351768494,
+            "1": 0.470500648021698,
+            "2": 0.4541025459766388,
+            "3": 0.5871812701225281,
+            "4": 0.39393216371536255
+          },
+          "cosine_similarities": {
+            "0": 0.39393219351768494,
+            "1": 0.470500648021698,
+            "2": 0.4541025459766388,
+            "3": 0.5871812701225281,
+            "4": 0.39393216371536255
+          },
+          "aggregation_weights": {
+            "0": 0.17130102207769202,
+            "1": 0.2045967382727124,
+            "2": 0.19746603992747339,
+            "3": 0.2553351906039404,
+            "4": 0.1713010091181818
+          },
+          "server_update_norm": 1.191166877746582,
+          "client_update_norms": {
+            "0": 1.4264878034591675,
+            "1": 79.72413635253906,
+            "2": 72.17823028564453,
+            "3": 1.6102269887924194,
+            "4": 1.6820225715637207
+          },
+          "total_trust": 2.2996488213539124,
+          "root_samples": 30
+        },
+        {
+          "trust_scores": {
+            "0": 0.45523834228515625,
+            "1": 0.5366472005844116,
+            "2": 0.5339182615280151,
+            "3": 0.6315227150917053,
+            "4": 0.5207476615905762
+          },
+          "cosine_similarities": {
+            "0": 0.45523834228515625,
+            "1": 0.5366472005844116,
+            "2": 0.5339182615280151,
+            "3": 0.6315227150917053,
+            "4": 0.5207476615905762
+          },
+          "aggregation_weights": {
+            "0": 0.16998720405182843,
+            "1": 0.20038548759243946,
+            "2": 0.19936649451313046,
+            "3": 0.2358122562673227,
+            "4": 0.19444855757527899
+          },
+          "server_update_norm": 1.299608588218689,
+          "client_update_norms": {
+            "0": 1.4132932424545288,
+            "1": 82.96037292480469,
+            "2": 78.39707946777344,
+            "3": 1.6916133165359497,
+            "4": 1.6921600103378296
+          },
+          "total_trust": 2.6780741810798645,
+          "root_samples": 30
+        },
+        {
+          "trust_scores": {
+            "0": 0.22122600674629211,
+            "1": 0.2935640513896942,
+            "2": 0.31237053871154785,
+            "3": 0.5630308389663696,
+            "4": 0.24912391602993011
+          },
+          "cosine_similarities": {
+            "0": 0.22122600674629211,
+            "1": 0.2935640513896942,
+            "2": 0.31237053871154785,
+            "3": 0.5630308389663696,
+            "4": 0.24912391602993011
+          },
+          "aggregation_weights": {
+            "0": 0.13495024401343297,
+            "1": 0.17907722944185545,
+            "2": 0.19054938902402543,
+            "3": 0.34345486872498077,
+            "4": 0.15196826879570538
+          },
+          "server_update_norm": 1.2128819227218628,
+          "client_update_norms": {
+            "0": 1.1623746156692505,
+            "1": 68.83799743652344,
+            "2": 66.72654724121094,
+            "3": 1.4873892068862915,
+            "4": 1.5321369171142578
+          },
+          "total_trust": 1.639315351843834,
+          "root_samples": 30
+        }
+      ],
+      "recovery_metrics": {}
+    },
+    "ASH-FL": {
+      "defense_name": "ASH-FL (Primary Default)",
+      "attack_type": "scaling",
+      "initial_accuracy": 0.6666666666666666,
+      "initial_loss": 0.6841420531272888,
+      "per_round_accuracy": [
+        0.8,
+        0.5,
+        0.8
+      ],
+      "per_round_loss": [
+        14.615291595458984,
+        50.0,
+        16.894256591796875
+      ],
+      "final_accuracy": 0.8,
+      "final_loss": 16.894256591796875,
+      "clean_accuracy": 0.8333333333333334,
+      "attacked_accuracy": 0.5,
+      "accuracy_degradation": 0.033333333333333326,
+      "backdoor_asr": null,
+      "per_round_backdoor_asr": null,
+      "defense_type": "self_healing",
+      "supports_self_healing": true,
+      "supports_explicit_detection": true,
+      "per_round_defense_metrics": [
+        {
+          "dps_scores": {
+            "0": 0.1321744975761884,
+            "1": 0.7032336820789431,
+            "2": 0.7133800603576754,
+            "3": 0.11019108353678059,
+            "4": 0.1235278285290577
+          },
+          "trust_scores": {
+            "0": 0.9867825502423812,
+            "1": 0.9296766317921057,
+            "2": 0.9286619939642324,
+            "3": 0.988980891646322,
+            "4": 0.9876472171470942
+          },
+          "aggregation_weights": {
+            "0": 0.21395668142031848,
+            "1": 0.17366505614311625,
+            "2": 0.17300258485581005,
+            "3": 0.21562960704532527,
+            "4": 0.22374607053542997
+          },
+          "G_scores": {
+            "0": 0.2532567962425386,
+            "1": 0.9983411989198255,
+            "2": 0.9983411989198255,
+            "3": 0.19288081973377608,
+            "4": 0.22280279766710157
+          },
+          "C_scores": {
+            "0": 0.053852856159210205,
+            "1": 0.6062279939651489,
+            "2": 0.6438071727752686,
+            "3": 0.032808780670166016,
+            "4": 0.05228215456008911
+          },
+          "H_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "P_scores": {
+            "0": 0.18242552380635635,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 0.18242552380635635,
+            "4": 0.18242552380635635
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "NORMAL",
+          "quarantined_clients": [],
+          "recovery_attempts": 0,
+          "checkpoint_count": 1,
+          "status_message": "Healthy operation",
+          "is_recovering": false,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        },
+        {
+          "dps_scores": {
+            "0": 0.23231649844644642,
+            "1": 0.8095521237083529,
+            "2": 0.8095521237083529,
+            "3": 0.33395434557714343,
+            "4": 0.22371014965200942
+          },
+          "trust_scores": {
+            "0": 0.9638579635623447,
+            "1": 0.854414462629173,
+            "2": 0.8534819650221347,
+            "3": 0.9559534450005173,
+            "4": 0.9655525464719574
+          },
+          "aggregation_weights": {
+            "0": 0.22478200141512358,
+            "1": 0.16120937047484066,
+            "2": 0.1608576785828029,
+            "3": 0.21766812381642794,
+            "4": 0.23548282571080487
+          },
+          "G_scores": {
+            "0": 0.2366210514657917,
+            "1": 0.9983411989198255,
+            "2": 0.9983411989198255,
+            "3": 0.23554428269850894,
+            "4": 0.20438001106477247
+          },
+          "C_scores": {
+            "0": 0.001350700855255127,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 0.0013946890830993652,
+            "4": 0.0017163753509521484
+          },
+          "H_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "P_scores": {
+            "0": 0.6224597234065324,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 0.9999289748004042,
+            "4": 0.6224597234065324
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "MONITOR",
+          "quarantined_clients": [],
+          "recovery_attempts": 0,
+          "checkpoint_count": 1,
+          "status_message": "Degradation detected, entering monitoring",
+          "is_recovering": false,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        },
+        {
+          "dps_scores": {
+            "0": 0.28901379784994874,
+            "1": 0.7788069422543904,
+            "2": 0.7772746336304924,
+            "3": 0.2438130084148209,
+            "4": 0.2849179040450646
+          },
+          "trust_scores": {
+            "0": 0.9360011384986376,
+            "1": 0.7878720711233576,
+            "2": 0.7871429768548535,
+            "3": 0.9326460564675085,
+            "4": 0.938042225693341
+          },
+          "aggregation_weights": {
+            "0": 0.31460707083465456,
+            "1": 0.02062589501874135,
+            "2": 0.020592870295580563,
+            "3": 0.3145390780842115,
+            "4": 0.329635085766812
+          },
+          "G_scores": {
+            "0": 0.31002551887238755,
+            "1": 0.9983411989198255,
+            "2": 0.9983411989198255,
+            "3": 0.2514753464357513,
+            "4": 0.16798161486607552
+          },
+          "C_scores": {
+            "0": 0.0019531846046447754,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 0.00129622220993042,
+            "4": 0.0011406540870666504
+          },
+          "H_scores": {
+            "0": 0.8185508235970198,
+            "1": 0.9999996164122174,
+            "2": 0.9919348341811751,
+            "3": 0.6647883865935295,
+            "4": 1.0
+          },
+          "P_scores": {
+            "0": 0.18242552380635635,
+            "1": 0.18242552380635635,
+            "2": 0.18242552380635635,
+            "3": 0.18242552380635635,
+            "4": 0.18242552380635635
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "RECOVERY",
+          "quarantined_clients": [
+            1,
+            2
+          ],
+          "recovery_attempts": 1,
+          "checkpoint_count": 1,
+          "status_message": "Restored checkpoint from round 1",
+          "is_recovering": true,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        }
+      ],
+      "recovery_metrics": {
+        "recovery_attempts": 1,
+        "checkpoint_count": 1,
+        "final_fsm_state": "RECOVERY",
+        "quarantined_clients": [
+          1,
+          2
+        ],
+        "recovery_triggered": true
+      }
+    }
+  },
+  "summary_table": [
+    {
+      "Defense": "Multi-Krum",
+      "Type": "Robust Aggregation",
+      "Final Accuracy": "80.0%",
+      "Accuracy Drop": "+6.7%",
+      "Final Loss": "9.8274",
+      "Backdoor ASR": "N/A",
+      "Explicit Detection": "N/A (Robust Agg)",
+      "Self-Healing": "N/A",
+      "Recovery Status": "N/A"
+    },
+    {
+      "Defense": "Trimmed Mean",
+      "Type": "Robust Aggregation",
+      "Final Accuracy": "50.0%",
+      "Accuracy Drop": "+33.3%",
+      "Final Loss": "45.7705",
+      "Backdoor ASR": "N/A",
+      "Explicit Detection": "N/A (Robust Agg)",
+      "Self-Healing": "N/A",
+      "Recovery Status": "N/A"
+    },
+    {
+      "Defense": "FLTrust",
+      "Type": "Trust Weighted",
+      "Final Accuracy": "83.3%",
+      "Accuracy Drop": "+0.0%",
+      "Final Loss": "0.3416",
+      "Backdoor ASR": "N/A",
+      "Explicit Detection": "N/A (Robust Agg)",
+      "Self-Healing": "N/A",
+      "Recovery Status": "N/A"
+    },
+    {
+      "Defense": "ASH-FL",
+      "Type": "Self Healing",
+      "Final Accuracy": "80.0%",
+      "Accuracy Drop": "+3.3%",
+      "Final Loss": "16.8943",
+      "Backdoor ASR": "N/A",
+      "Explicit Detection": "Available",
+      "Self-Healing": "YES (Autonomous FSM)",
+      "Recovery Status": "Attempts: 1 | State: RECOVERY"
+    }
+  ]
+}

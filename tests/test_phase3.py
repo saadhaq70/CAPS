@@ -35,10 +35,10 @@ def test_health_monitor():
     print("  ✓ Accuracy drop detection")
     
     # Test DPS threshold
-    monitor2 = HealthMonitor(dps_threshold=2.0)
+    monitor2 = HealthMonitor(dps_threshold=0.55)
     metrics = {"accuracy": 0.75, "loss": 0.5}
-    dps_normal = {0: 0.5, 1: 0.8, 2: 0.6}
-    dps_high = {0: 0.5, 1: 5.0, 2: 0.6}  # Client 1 suspicious
+    dps_normal = {0: 0.1, 1: 0.2, 2: 0.15}
+    dps_high = {0: 0.1, 1: 0.85, 2: 0.15}  # Client 1 suspicious
     
     monitor2.update_history(0.75, 0.5)
     monitor2.update_history(0.76, 0.49)
@@ -110,7 +110,7 @@ def test_self_healing_controller():
     # Healthy rounds - should stay in NORMAL
     for i in range(1, 4):
         metrics = {"accuracy": 0.7 + i * 0.02, "loss": 0.5 - i * 0.02}
-        dps = {0: 0.5, 1: 0.6, 2: 0.4, 3: 0.5, 4: 0.6}
+        dps = {0: 0.1, 1: 0.15, 2: 0.12, 3: 0.14, 4: 0.13}
         final_params, status = controller.update(i, params, metrics, dps)
         assert controller.get_state() == "normal"
     
@@ -118,7 +118,7 @@ def test_self_healing_controller():
     
     # Attack - should trigger MONITOR then RECOVERY
     attack_metrics = {"accuracy": 0.45, "loss": 0.85}
-    attack_dps = {0: 0.5, 1: 4.5, 2: 0.4, 3: 0.5, 4: 0.6}  # Client 1 malicious
+    attack_dps = {0: 0.1, 1: 0.85, 2: 0.12, 3: 0.14, 4: 0.13}  # Client 1 malicious
     
     final_params, status = controller.update(4, params, attack_metrics, attack_dps)
     assert controller.get_state() in ["monitor", "recovery"], f"Should enter monitor/recovery, got {controller.get_state()}"
@@ -128,7 +128,7 @@ def test_self_healing_controller():
     # Continue through recovery
     for i in range(5, 10):
         metrics = {"accuracy": 0.5 + (i - 5) * 0.05, "loss": 0.7 - (i - 5) * 0.05}
-        dps = {0: 0.5, 1: 4.0, 2: 0.4, 3: 0.5, 4: 0.6}
+        dps = {0: 0.1, 1: 0.80, 2: 0.12, 3: 0.14, 4: 0.13}
         final_params, status = controller.update(i, params, metrics, dps)
     
     # Should eventually return to normal or resume

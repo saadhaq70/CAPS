@@ -1,1041 +1,657 @@
 """
-CAPS // ASH-FL Unified Dashboard
-Combines Cyber HUD design (app.py) with real simulation functionality (dashboard_app.py)
+CAPS // ASH-FL Unified Research Dashboard
+Adaptive Self-Healing Federated Learning (ASH-FL) Capstone Demonstration
+Provides clean, minimal, research-grade evaluation and live simulation.
 """
 
 import os
 import sys
 import time
+import json
+from typing import Any, Dict, List, Optional, Tuple
+
 import numpy as np
 import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 
-# Ensure project root is available
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+# Ensure project root is available on sys.path
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 from dashboard.simulator import DashboardSimulator
-from dashboard.visualizations import (create_accuracy_chart, create_loss_chart, 
-                                     create_dps_radar, create_trust_evolution, 
-                                     create_aggregation_heatmap)
-from dashboard.explanations import get_explanation_content
-
-
-# ==============================================================================
-# Network Topology Visualizer
-# ==============================================================================
-def create_topology_figure(num_nodes: int, active_nodes: list, malicious_nodes: list, results: dict):
-    """
-    Create network topology visualization showing central server and client nodes.
-    
-    Args:
-        num_nodes: Total number of client nodes
-        active_nodes: List of client IDs that are active (selected for this round)
-        malicious_nodes: List of client IDs that are malicious
-        results: Simulation results (for DPS-based coloring)
-    
-    Returns:
-        Plotly figure
-    """
-    import plotly.graph_objects as go
-    import numpy as np
-    
-    fig = go.Figure()
-
-    # Center Server Coordinates
-    cx, cy = 0.0, 0.0
-
-    # Client Node Angles (arrange in circle)
-    angles = np.linspace(0, 2 * np.pi, num_nodes, endpoint=False)
-    radius = 1.6
-
-    client_x = [radius * np.cos(a) for a in angles]
-    client_y = [radius * np.sin(a) for a in angles]
-    
-    # Get DPS scores from final round for color intensity
-    final_round = results['rounds'][-1]
-    dps_scores = final_round.get('dps_scores', {})
-
-    # Draw connection lines from server to each client
-    for i in range(num_nodes):
-        is_active = i in active_nodes
-        is_malicious = i in malicious_nodes
-        dps = dps_scores.get(i, 0.0)
-        
-        # Line style based on client status
-        if is_malicious:
-            line_color = f"rgba(255, 0, 110, {min(0.3 + dps * 0.7, 1.0)})"  # Red, intensity based on DPS
-            line_width = 3 if is_active else 1.5
-        elif is_active:
-            line_color = "#00f0ff"  # Cyan for active honest
-            line_width = 2.5
-        else:
-            line_color = "rgba(100, 116, 139, 0.3)"  # Gray for inactive
-            line_width = 1
-        
-        dash_style = "solid" if is_active else "dot"
-
-        fig.add_trace(go.Scatter(
-            x=[cx, client_x[i]],
-            y=[cy, client_y[i]],
-            mode="lines",
-            line=dict(color=line_color, width=line_width, dash=dash_style),
-            hoverinfo="none",
-            showlegend=False
-        ))
-
-    # Draw Client Nodes
-    client_colors = []
-    client_sizes = []
-    client_symbols = []
-    hover_texts = []
-    
-    for i in range(num_nodes):
-        is_active = i in active_nodes
-        is_malicious = i in malicious_nodes
-        dps = dps_scores.get(i, 0.0)
-        
-        if is_malicious:
-            # Red shades for malicious (darker = higher DPS)
-            intensity = min(0.5 + dps * 0.5, 1.0)
-            client_colors.append(f"rgba(255, 0, 110, {intensity})")
-            client_sizes.append(40 if is_active else 32)
-            client_symbols.append("x")  # X symbol for malicious
-            status = f"MALICIOUS (DPS: {dps:.3f})"
-        elif is_active:
-            client_colors.append("#00ff9d")  # Neon green for active honest
-            client_sizes.append(36)
-            client_symbols.append("circle")
-            status = f"ACTIVE (DPS: {dps:.3f})"
-        else:
-            client_colors.append("#475569")  # Gray for standby
-            client_sizes.append(28)
-            client_symbols.append("circle")
-            status = "STANDBY"
-        
-        hover_texts.append(f"<b>Client {i}</b><br>{status}")
-    
-    fig.add_trace(go.Scatter(
-        x=client_x,
-        y=client_y,
-        mode="markers+text",
-        marker=dict(
-            size=client_sizes,
-            color=client_colors,
-            symbol=client_symbols,
-            line=dict(color="#ffffff", width=1.5)
-        ),
-        text=[f"C{i}" for i in range(num_nodes)],
-        textposition="top center",
-        textfont=dict(family="Orbitron", size=10, color="#ffffff"),
-        name="Clients",
-        hovertext=hover_texts,
-        hoverinfo="text",
-        showlegend=False
-    ))
-
-    # Draw Central Server Node
-    fig.add_trace(go.Scatter(
-        x=[cx], y=[cy],
-        mode="markers+text",
-        marker=dict(
-            size=55,
-            color="#00f0ff",
-            symbol="hexagon",
-            line=dict(color="#ffffff", width=2.5),
-            opacity=0.9
-        ),
-        text=["SERVER"],
-        textposition="bottom center",
-        textfont=dict(family="Orbitron", size=12, color="#00f0ff", weight="bold"),
-        name="Central Server",
-        hovertext="<b>FedAvg Aggregator</b><br>Coordinates FL training",
-        hoverinfo="text",
-        showlegend=False
-    ))
-
-    fig.update_layout(
-        showlegend=False,
-        plot_bgcolor="rgba(0,0,0,0)",
-        paper_bgcolor="rgba(13, 17, 27, 0.75)",
-        margin=dict(l=20, r=20, t=30, b=20),
-        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-2.2, 2.2]),
-        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False, range=[-2.2, 2.2]),
-        height=400,
-        font=dict(family="Space Grotesk", color="#94a3b8")
-    )
-    
-    return fig
-
+from dashboard.visualizations import (
+    create_accuracy_chart,
+    create_loss_chart,
+    create_dps_radar,
+    create_trust_evolution,
+    create_aggregation_heatmap,
+)
+from defenses import (
+    ComparisonRunner,
+    ExperimentConfig,
+    DefenseResult,
+    ComparisonResult,
+)
+from dashboard.comparison_visualizations import (
+    create_comparison_accuracy_bar,
+    create_comparison_accuracy_trajectory,
+    create_comparison_loss_trajectory,
+    create_comparison_degradation_chart,
+    create_comparison_backdoor_asr_chart,
+    DEFENSE_COLORS,
+)
 
 # ==============================================================================
 # Page Configuration
 # ==============================================================================
 st.set_page_config(
-    page_title="CAPS // ASH-FL Command Console",
+    page_title="ASH-FL // Federated Learning Defense Benchmark",
     page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="expanded"
+    initial_sidebar_state="collapsed",
 )
 
 # ==============================================================================
-# Cyber HUD Stylesheet (khaledoghli.com inspired)
+# Academic Restrained Dark Stylesheet
+# Clean, minimal, high-contrast, presentation-ready layout
 # ==============================================================================
 st.markdown("""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700;900&family=Space+Grotesk:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap');
 
 :root {
-    --bg-dark: #07090e;
-    --card-bg: rgba(13, 17, 27, 0.78);
-    --border-glow: rgba(0, 240, 255, 0.22);
-    --neon-cyan: #00f0ff;
-    --neon-green: #00ff9d;
-    --neon-purple: #9d4edd;
-    --neon-red: #ff006e;
-    --text-primary: #f1f5f9;
+    --bg-main: #0b0f19;
+    --card-bg: #111827;
+    --card-border: #1e293b;
+    --text-primary: #f8fafc;
+    --text-secondary: #94a3b8;
     --text-muted: #64748b;
+    --accent-indigo: #6366f1;
+    --accent-emerald: #10b981;
+    --accent-amber: #f59e0b;
+    --accent-rose: #f43f5e;
+    --accent-sky: #0284c7;
 }
 
 /* Background & Core Layout */
 .stApp {
-    background: radial-gradient(circle at 50% 0%, #0d1527 0%, #06080d 65%, #030407 100%) !important;
-    font-family: 'Space Grotesk', -apple-system, sans-serif !important;
+    background-color: var(--bg-main) !important;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
     color: var(--text-primary);
 }
 
-section[data-testid="stSidebar"] {
-    background-color: #080b13 !important;
-    border-right: 1px solid rgba(0, 240, 255, 0.15) !important;
-}
-
-/* Typography */
-h1, h2, h3, h4 {
-    font-family: 'Orbitron', monospace !important;
-    letter-spacing: 0.05em;
-    color: #ffffff;
-}
-
-h1 {
-    text-shadow: 0 0 16px rgba(0, 240, 255, 0.5);
-}
-
-/* Cards & Glassmorphism */
-.cyber-card {
-    background: var(--card-bg);
-    border: 1px solid var(--border-glow);
+/* Clean Cards */
+.clean-card {
+    background-color: var(--card-bg);
+    border: 1px solid var(--card-border);
     border-radius: 8px;
-    padding: 1.25rem;
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5), inset 0 0 12px rgba(0, 240, 255, 0.03);
-    backdrop-filter: blur(12px);
+    padding: 1.25rem 1.5rem;
     margin-bottom: 1rem;
-    position: relative;
 }
 
-.cyber-card::before {
-    content: "";
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 28px;
-    height: 2px;
-    background: var(--neon-cyan);
-    box-shadow: 0 0 8px var(--neon-cyan);
+/* Header Container */
+.header-box {
+    border-bottom: 1px solid #1e293b;
+    padding-bottom: 1rem;
+    margin-bottom: 1.5rem;
 }
 
-/* Badges */
-.cyber-badge {
+/* Academic Status Pills */
+.pill {
     display: inline-block;
-    padding: 3px 10px;
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.08em;
-    border-radius: 4px;
+    padding: 0.2rem 0.65rem;
+    font-size: 0.75rem;
+    font-weight: 500;
+    border-radius: 9999px;
+    background: #1e293b;
+    color: var(--text-secondary);
+    border: 1px solid #334155;
+    margin-right: 0.4rem;
+}
+
+.pill-indigo {
+    background: rgba(99, 102, 241, 0.12);
+    color: #a5b4fc;
+    border-color: rgba(99, 102, 241, 0.3);
+}
+
+.pill-emerald {
+    background: rgba(16, 185, 129, 0.12);
+    color: #6ee7b7;
+    border-color: rgba(16, 185, 129, 0.3);
+}
+
+.pill-rose {
+    background: rgba(244, 63, 94, 0.12);
+    color: #fda4af;
+    border-color: rgba(244, 63, 94, 0.3);
+}
+
+/* Metric Display Cards */
+.metric-box {
+    background: #111827;
+    border: 1px solid #1e293b;
+    border-radius: 8px;
+    padding: 1rem 1.25rem;
+    text-align: left;
+}
+.metric-box .metric-title {
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-secondary);
     text-transform: uppercase;
-    background: rgba(0, 240, 255, 0.1);
-    color: var(--neon-cyan);
-    border: 1px solid rgba(0, 240, 255, 0.35);
+    letter-spacing: 0.04em;
+    margin-bottom: 0.25rem;
 }
-
-.cyber-badge-green {
-    background: rgba(0, 255, 157, 0.1);
-    color: var(--neon-green);
-    border: 1px solid rgba(0, 255, 157, 0.35);
+.metric-box .metric-value {
+    font-size: 1.65rem;
+    font-weight: 700;
+    color: #f8fafc;
+    font-family: 'JetBrains Mono', monospace;
 }
-
-.cyber-badge-purple {
-    background: rgba(157, 78, 221, 0.15);
-    color: #c77dff;
-    border: 1px solid rgba(157, 78, 221, 0.4);
-}
-
-.cyber-badge-red {
-    background: rgba(255, 0, 110, 0.15);
-    color: var(--neon-red);
-    border: 1px solid rgba(255, 0, 110, 0.4);
-}
-
-/* Metric Display */
-.metric-val {
-    font-family: 'Orbitron', monospace;
-    font-size: 1.85rem;
-    font-weight: 800;
-    color: #ffffff;
-    line-height: 1.1;
-    margin-top: 4px;
-}
-
-.metric-sub {
-    font-family: 'Space Grotesk', sans-serif;
+.metric-box .metric-sub {
     font-size: 0.78rem;
     color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
+    margin-top: 0.2rem;
 }
 
-.delta-tag {
-    font-family: 'JetBrains Mono', monospace;
-    font-size: 0.75rem;
-    color: var(--neon-green);
-    margin-left: 6px;
-}
-
-/* Button */
-.stButton > button {
-    background: linear-gradient(135deg, rgba(0, 240, 255, 0.18), rgba(157, 78, 221, 0.25)) !important;
-    border: 1px solid var(--neon-cyan) !important;
-    color: #ffffff !important;
-    font-family: 'Orbitron', monospace !important;
-    font-weight: 700;
-    letter-spacing: 0.12em;
-    padding: 0.65rem 1.8rem;
-    border-radius: 4px;
-    box-shadow: 0 0 18px rgba(0, 240, 255, 0.3);
-    transition: all 0.3s ease;
-}
-
-.stButton > button:hover {
-    box-shadow: 0 0 28px rgba(0, 240, 255, 0.7);
-    transform: translateY(-1px);
-}
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {
-    gap: 8px;
-    background-color: rgba(13, 17, 27, 0.6);
-    padding: 0.5rem;
+/* Table Enhancements */
+div[data-testid="stDataFrame"] {
+    border: 1px solid #1e293b;
     border-radius: 8px;
+    overflow: hidden;
 }
 
-.stTabs [data-baseweb="tab"] {
-    font-family: 'Orbitron', monospace;
-    font-size: 0.85rem;
-    font-weight: 600;
-    color: var(--text-muted);
-    background-color: transparent;
-    border: 1px solid rgba(100, 116, 139, 0.3);
-    border-radius: 4px;
-    padding: 0.5rem 1rem;
-}
-
-.stTabs [aria-selected="true"] {
-    background: rgba(0, 240, 255, 0.12);
-    border: 1px solid var(--neon-cyan);
-    color: #ffffff;
-    box-shadow: 0 0 12px rgba(0, 240, 255, 0.25);
-}
-
-/* DataFrames */
-.stDataFrame {
-    font-family: 'JetBrains Mono', monospace;
-}
-
-/* Malicious/Honest row highlighting */
-.malicious-row {
-    background-color: rgba(255, 0, 110, 0.1) !important;
-}
-
-.honest-row {
-    background-color: rgba(0, 255, 157, 0.05) !important;
+/* Clean Sidebar */
+section[data-testid="stSidebar"] {
+    background-color: #0d1322 !important;
+    border-right: 1px solid #1e293b !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
 
 # ==============================================================================
-# Session State Initialization
+# Header
 # ==============================================================================
-if 'simulation_run' not in st.session_state:
-    st.session_state.simulation_run = False
-if 'simulation_results' not in st.session_state:
-    st.session_state.simulation_results = None
+def render_header(current_attack_label: str = "Label Flip"):
+    """Render academic demonstration header."""
+    st.markdown(f"""
+    <div class="header-box">
+        <div style="display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem;">
+            <div>
+                <div style="display: flex; gap: 6px; margin-bottom: 6px;">
+                    <span class="pill pill-indigo">CAPSTONE RESEARCH</span>
+                    <span class="pill pill-emerald">UCI HEART DISEASE (45)</span>
+                    <span class="pill">5 CLIENTS &bull; 3 ROUNDS</span>
+                </div>
+                <h2 style="margin: 0; font-size: 1.85rem; font-weight: 700; letter-spacing: -0.02em; color: #f8fafc;">
+                    Adaptive Self-Healing Federated Learning (ASH-FL)
+                </h2>
+                <div style="color: #94a3b8; font-size: 0.92rem; margin-top: 4px;">
+                    Adversarial Robustness Benchmark & Autonomous Checkpoint Recovery under Byzantine Attacks
+                </div>
+            </div>
+            <div style="text-align: right;">
+                <div style="font-size: 0.78rem; color: #64748b; margin-bottom: 4px;">ACTIVE SCENARIO</div>
+                <span class="pill pill-rose" style="font-size: 0.85rem; padding: 0.3rem 0.8rem; font-weight: 600;">
+                    {current_attack_label.upper()}
+                </span>
+            </div>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
 
 
 # ==============================================================================
-# Sidebar Terminal Controls
+# Defense Comparison Benchmark (Primary View)
+# ==============================================================================
+def render_defense_comparison():
+    """Render the main Capstone Defense Comparison benchmark tab."""
+    # ── 1. Functional Controls Card ──
+    st.markdown('<div class="clean-card" style="padding: 1.25rem;">', unsafe_allow_html=True)
+    c_atk, c_btn = st.columns([3, 1])
+
+    with c_atk:
+        attack_options = ["Label Flip", "Sign Flip", "Scaling", "Backdoor", "None (Clean FL)"]
+        selected_attack_label = st.selectbox(
+            "Threat Scenario / Adversarial Vector:",
+            attack_options,
+            index=0,
+            key="benchmark_threat_select",
+            help="Select the adversarial attack injected during federated training across malicious clients.",
+        )
+
+    attack_map = {
+        "Label Flip": "label_flip",
+        "Sign Flip": "sign_flip",
+        "Scaling": "scaling",
+        "Backdoor": "backdoor",
+        "None (Clean FL)": "none",
+    }
+    atk_key = attack_map[selected_attack_label]
+
+    st.markdown("<div style='font-size: 0.82rem; font-weight: 600; color: #cbd5e1; margin: 0.75rem 0 0.4rem 0;'>Compare Defenses:</div>", unsafe_allow_html=True)
+    d1, d2, d3, d4 = st.columns(4)
+    with d1:
+        use_ash = st.checkbox("ASH-FL (Primary Defense)", value=True, disabled=True, key="chk_ash",
+                              help="Mandatory proposed capstone defense. Multi-signal DPS, adaptive trust decay, quarantine, and autonomous checkpoint rollback.")
+    with d2:
+        use_mk = st.checkbox("Multi-Krum (Optional)", value=True, key="chk_mk",
+                             help="Distance-based robust aggregation (Blanchard et al., NeurIPS 2017).")
+    with d3:
+        use_tm = st.checkbox("Trimmed Mean (Optional)", value=True, key="chk_tm",
+                             help="Coordinate-wise parameter trimming with k=1 (Yin et al., ICML 2018).")
+    with d4:
+        use_flt = st.checkbox("FLTrust (Optional)", value=True, key="chk_flt",
+                              help="Clean server root bootstrapping and cosine trust weighting (Cao et al., NDSS 2021).")
+
+    selected_defense_names = ["ASH-FL"]
+    if use_mk: selected_defense_names.append("Multi-Krum")
+    if use_tm: selected_defense_names.append("Trimmed Mean")
+    if use_flt: selected_defense_names.append("FLTrust")
+
+    with c_btn:
+        st.write("")
+        st.write("")
+        run_comp_btn = st.button("⚡ Run Evaluation", type="primary", use_container_width=True, key="btn_run_comp",
+                                 help="Execute live comparison across selected defenses under strictly matched conditions.")
+
+    st.markdown('</div>', unsafe_allow_html=True)
+
+    # ── 2. Data Loading & Execution Logic ──
+    results_dir = os.path.join(PROJECT_ROOT, "results", "defense_comparison")
+    json_path = os.path.join(results_dir, f"{atk_key}.json")
+
+    if run_comp_btn:
+        with st.spinner(f"Executing federated comparison matrix for {selected_attack_label}..."):
+            config = ExperimentConfig(
+                num_clients=5,
+                num_rounds=3,
+                local_epochs=3,
+                batch_size=16,
+                learning_rate=0.01,
+                random_seed=42,
+                scale_factor=50.0,
+            )
+            runner = ComparisonRunner(config)
+            comp_res = runner.run_comparison(
+                attack_type=atk_key,
+                defense_names=selected_defense_names,
+            )
+            st.session_state.comparison_results = comp_res
+            st.session_state.comparison_attack_label = selected_attack_label
+            st.success(f"Evaluation completed for {selected_attack_label}.")
+    else:
+        # Load verified saved results from disk
+        cached = st.session_state.get("comparison_results")
+        cached_label = st.session_state.get("comparison_attack_label")
+
+        if cached is None or cached_label != selected_attack_label:
+            if os.path.exists(json_path):
+                try:
+                    with open(json_path, "r", encoding="utf-8") as f:
+                        data = json.load(f)
+                    d_results = {}
+                    for d_name, d_dict in data["defense_results"].items():
+                        d_results[d_name] = DefenseResult(**d_dict)
+                    comp_res = ComparisonResult(
+                        attack_type=data["attack_type"],
+                        config=data["config"],
+                        defense_results=d_results,
+                    )
+                    st.session_state.comparison_results = comp_res
+                    st.session_state.comparison_attack_label = selected_attack_label
+                except Exception as e:
+                    st.error(f"Error loading saved results: {e}")
+
+    comp_res: Optional[ComparisonResult] = st.session_state.get("comparison_results")
+    if comp_res is None or not comp_res.defense_results:
+        st.info("💡 Select an attack scenario above and click **⚡ Run Evaluation** to display the benchmark.")
+        return
+
+    # Filter active results by user checkboxes (ASH-FL is always included)
+    active_defense_results = {
+        name: res for name, res in comp_res.defense_results.items()
+        if name in selected_defense_names
+    }
+
+    if not active_defense_results:
+        st.warning("⚠️ No results available for the selected defenses. Click Run Evaluation to generate.")
+        return
+
+    # ── 3. Focused Results Summary Ribbon ──
+    ash_res = active_defense_results.get("ASH-FL")
+    if ash_res is not None:
+        c1, c2, c3, c4 = st.columns(4)
+        with c1:
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-title">Initial Model Accuracy</div>
+                <div class="metric-value">{ash_res.initial_accuracy:.1%}</div>
+                <div class="metric-sub">Seed 42 initial weights (20/30 test)</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c2:
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-title">ASH-FL Final Accuracy</div>
+                <div class="metric-value" style="color: #a5b4fc;">{ash_res.final_accuracy:.1%}</div>
+                <div class="metric-sub">Loss: {ash_res.final_loss:.4f} (Round 3)</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c3:
+            deg_sign = f"{ash_res.accuracy_degradation:+.1%}"
+            deg_color = "#10b981" if ash_res.accuracy_degradation <= 0 else "#f43f5e"
+            st.markdown(f"""
+            <div class="metric-box">
+                <div class="metric-title">Accuracy Degradation</div>
+                <div class="metric-value" style="color: {deg_color};">{deg_sign}</div>
+                <div class="metric-sub">vs. Clean Baseline ({ash_res.clean_accuracy:.1%})</div>
+            </div>
+            """, unsafe_allow_html=True)
+        with c4:
+            if atk_key == "backdoor":
+                asr_val = f"{ash_res.backdoor_asr:.1%}" if ash_res.backdoor_asr is not None else "N/A"
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">Backdoor Attack ASR</div>
+                    <div class="metric-value" style="color: #34d399;">{asr_val}</div>
+                    <div class="metric-sub">Lower is Better (2/15 non-target samples)</div>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                fsm_st = ash_res.recovery_metrics.get("final_fsm_state", "NORMAL")
+                rec_att = ash_res.recovery_metrics.get("recovery_attempts", 0)
+                rec_text = f"Triggered ({rec_att} attempts)" if rec_att > 0 else f"Healthy ({fsm_st})"
+                st.markdown(f"""
+                <div class="metric-box">
+                    <div class="metric-title">Autonomous Recovery</div>
+                    <div class="metric-value" style="font-size: 1.25rem; padding-top: 0.35rem;">{rec_text}</div>
+                    <div class="metric-sub">FSM State: {fsm_st}</div>
+                </div>
+                """, unsafe_allow_html=True)
+
+    st.write("")
+
+    # ── 4. Main Results Table ──
+    st.markdown("#### 📋 Defense Comparison Summary Table")
+    table_rows = []
+    for name, res in active_defense_results.items():
+        row = {
+            "Defense Strategy": name,
+            "Type": res.defense_type.replace("_", " ").title(),
+            "Initial Acc": f"{res.initial_accuracy:.1%}",
+            "Final Acc": f"{res.final_accuracy:.1%}",
+            "Clean Baseline": f"{res.clean_accuracy:.1%}",
+            "Acc Degradation": f"{res.accuracy_degradation:+.1%}",
+            "Final Loss": f"{res.final_loss:.4f}",
+            "Backdoor ASR": f"{res.backdoor_asr:.1%}" if (atk_key == "backdoor" and res.backdoor_asr is not None) else "—",
+            "Self-Healing Supported": "YES (Autonomous FSM)" if res.supports_self_healing else "N/A",
+        }
+        if res.supports_self_healing:
+            attempts = res.recovery_metrics.get("recovery_attempts", 0)
+            state = res.recovery_metrics.get("final_fsm_state", "NORMAL")
+            row["Recovery Status"] = f"Attempts: {attempts} | State: {state}"
+        else:
+            row["Recovery Status"] = "N/A (Robust Agg)"
+        table_rows.append(row)
+
+    df_table = pd.DataFrame(table_rows)
+    st.dataframe(df_table, use_container_width=True, hide_index=True)
+
+    st.write("")
+
+    # ── 5. Focused Visualizations (Only 2 Core Charts) ──
+    st.markdown("#### 📊 Performance Visualizations")
+    col_chart1, col_chart2 = st.columns(2)
+
+    with col_chart1:
+        fig_bar = create_comparison_accuracy_bar(active_defense_results)
+        st.plotly_chart(fig_bar, use_container_width=True, key="main_acc_bar")
+
+    with col_chart2:
+        fig_traj = create_comparison_accuracy_trajectory(active_defense_results)
+        st.plotly_chart(fig_traj, use_container_width=True, key="main_acc_traj")
+
+    # Backdoor ASR chart rendered strictly when backdoor experiment is selected
+    if atk_key == "backdoor":
+        st.write("")
+        fig_asr = create_comparison_backdoor_asr_chart(active_defense_results)
+        if fig_asr is not None:
+            st.plotly_chart(fig_asr, use_container_width=True, key="main_backdoor_asr")
+            st.caption(
+                "**Attack Success Rate (ASR):** Evaluated strictly on non-target clean test samples (label 0) stamped with the trojan trigger pattern. "
+                "Lower ASR indicates superior resilience against backdoor trojan injection."
+            )
+
+    st.write("")
+
+    # ── 6. Secondary Collapsible Technical Diagnostics ──
+    with st.expander("🔬 Technical Diagnostics & Defense Telemetry", expanded=False):
+        st.markdown("""
+        <div style="font-size: 0.88rem; color: #94a3b8; margin-bottom: 0.75rem;">
+            Inspect low-level algorithm telemetry: Multi-Krum pairwise distance scores, Trimmed Mean trimming bounds, 
+            FLTrust root gradient norms, and ASH-FL multi-signal Dynamic Protection Scores (DPS).
+        </div>
+        """, unsafe_allow_html=True)
+
+        # ASH-FL Telemetry
+        if "ASH-FL" in active_defense_results:
+            ash_res = active_defense_results["ASH-FL"]
+            last_m = ash_res.per_round_defense_metrics[-1] if ash_res.per_round_defense_metrics else {}
+            st.markdown("**🟣 Proposed ASH-FL Telemetry (Final Round):**")
+            diag_cols = st.columns(4)
+            if "G_scores" in last_m and last_m["G_scores"]:
+                with diag_cols[0]: st.metric("Max G (Gradient)", f"{max(last_m['G_scores'].values()):.3f}")
+            if "C_scores" in last_m and last_m["C_scores"]:
+                with diag_cols[1]: st.metric("Max C (Cosine)", f"{max(last_m['C_scores'].values()):.3f}")
+            if "H_scores" in last_m and last_m["H_scores"]:
+                with diag_cols[2]: st.metric("Max H (History)", f"{max(last_m['H_scores'].values()):.3f}")
+            if "P_scores" in last_m and last_m["P_scores"]:
+                with diag_cols[3]: st.metric("Max P (Shadow Val)", f"{max(last_m['P_scores'].values()):.3f}")
+
+            if "dps_scores" in last_m:
+                st.markdown(r"*Normalized DPS Scores ($DPS_i \in [0, 1]$):*")
+                st.json(last_m["dps_scores"])
+
+        # Baseline Diagnostics
+        if "Multi-Krum" in active_defense_results:
+            mk_res = active_defense_results["Multi-Krum"]
+            last_m = mk_res.per_round_defense_metrics[-1] if mk_res.per_round_defense_metrics else {}
+            st.markdown(f"""
+            **🔷 Multi-Krum Telemetry (f=1, m=4):**  
+            - Selected Client IDs: `{last_m.get('selected_clients', [])}`  
+            - Excluded Outlier Client IDs: `{last_m.get('excluded_clients', [])}`
+            """)
+
+        if "Trimmed Mean" in active_defense_results:
+            tm_res = active_defense_results["Trimmed Mean"]
+            last_m = tm_res.per_round_defense_metrics[-1] if tm_res.per_round_defense_metrics else {}
+            st.markdown(f"""
+            **🔶 Trimmed Mean Telemetry (k=1):**  
+            - Trimming: Discards {last_m.get('trim_k', 1)} minimum and {last_m.get('trim_k', 1)} maximum per coordinate.  
+            - Retained Coordinates per Parameter: {last_m.get('retained_per_coordinate', 3)} / {last_m.get('num_clients', 5)}
+            """)
+
+        if "FLTrust" in active_defense_results:
+            flt_res = active_defense_results["FLTrust"]
+            last_m = flt_res.per_round_defense_metrics[-1] if flt_res.per_round_defense_metrics else {}
+            st.markdown(r"""
+            **🟢 FLTrust Telemetry (Server Root Data N=30):**  
+            - Server Root Update Norm $\|g_0\|$: """ + f"`{last_m.get('server_update_norm', 0.0):.4f}`  \n            - Trust Scores:\n            ")
+            if "trust_scores" in last_m:
+                st.json(last_m["trust_scores"])
+
+
+# ==============================================================================
+# Secondary View: Interactive Simulation (Preserved Simulator)
+# ==============================================================================
+def render_interactive_simulation(num_clients: int, dps_threshold: float):
+    """Render the preserved live single-simulation tab."""
+    st.markdown("""
+    <div style="color: #94a3b8; font-size: 0.9rem; margin-bottom: 1rem;">
+        Execute an interactive step-by-step federated training simulation with custom client attack injections, 
+        live multi-signal telemetry (G/C/H/P/D), and autonomous FSM self-healing.
+    </div>
+    """, unsafe_allow_html=True)
+
+    if not st.session_state.get("simulation_run", False):
+        st.info("💡 Configure parameters in the sidebar and click **Execute Simulation** to run a live federated learning session.")
+    else:
+        results = st.session_state.simulation_results
+
+        # Sub-tabs for simulator
+        sim_tab1, sim_tab2, sim_tab3 = st.tabs(["Overview & Metrics", "DPS Radar & Telemetry", "Self-Healing FSM Log"])
+
+        with sim_tab1:
+            st.markdown("##### Global Model Convergence")
+            col_s1, col_s2 = st.columns(2)
+            with col_s1:
+                fig_acc = create_accuracy_chart(results)
+                st.plotly_chart(fig_acc, use_container_width=True)
+            with col_s2:
+                fig_loss = create_loss_chart(results)
+                st.plotly_chart(fig_loss, use_container_width=True)
+
+            st.markdown("##### Trust Evolution & Weight Allocation")
+            fig_trust = create_trust_evolution(results)
+            st.plotly_chart(fig_trust, use_container_width=True)
+
+        with sim_tab2:
+            st.markdown("##### Multi-Signal Radar Breakdown (G, C, H, P, D)")
+            client_id = st.selectbox("Select Client for Radar Analysis:", list(range(num_clients)), index=0)
+            fig_radar = create_dps_radar(results, client_id)
+            st.plotly_chart(fig_radar, use_container_width=True)
+
+        with sim_tab3:
+            st.markdown("##### Autonomous Self-Healing FSM Status")
+            st.write(f"**Recovery Attempts:** {results.get('recovery_attempts', 0)}")
+            st.write(f"**Total Checkpoints Retained:** {results.get('total_checkpoints', 0)}")
+            st.write(f"**Quarantined Clients:** {results.get('quarantined_clients', [])}")
+
+            # Round by round timeline
+            if "rounds" in results:
+                history = [
+                    {
+                        "Round": r["round"],
+                        "FSM State": r["state"],
+                        "Accuracy": f"{r['metrics']['accuracy']:.1%}",
+                        "Loss": f"{r['metrics']['loss']:.4f}",
+                        "Quarantined": r.get("quarantined", []),
+                    }
+                    for r in results["rounds"]
+                ]
+                st.dataframe(pd.DataFrame(history), use_container_width=True, hide_index=True)
+
+
+# ==============================================================================
+# Sidebar Simulation Controls
 # ==============================================================================
 def render_sidebar():
-    """Render sidebar configuration panel."""
+    """Render sidebar simulation controller."""
     with st.sidebar:
-        st.markdown('<span class="cyber-badge">TELEMETRY CONTROLLER</span>', unsafe_allow_html=True)
-        st.markdown("### ⚙️ SIMULATION PARAMETERS")
+        st.markdown("### ⚙️ Live Simulator Settings")
+        st.caption("Optional step-by-step federated training simulation.")
 
         num_clients = st.slider("Total Clients (K)", 3, 10, 5)
-        num_rounds = st.slider("Federation Rounds", 5, 20, 15)  # Increased default from 8 to 15
+        num_rounds = st.slider("Federation Rounds", 3, 15, 5)
         random_seed = st.number_input("Random Seed", 0, 9999, 42)
 
         st.markdown("---")
-        st.markdown('<span class="cyber-badge cyber-badge-red">ATTACK CONFIGURATION</span>', unsafe_allow_html=True)
-        
-        enable_attack = st.checkbox("Enable Attacks", value=True)
-        
-        # Store per-client attack config
+        st.markdown("**Adversarial Configuration**")
+        enable_attack = st.checkbox("Enable Client Attacks", value=True)
         client_attacks = {}
         scale_factor = 50.0
-        
+
         if enable_attack:
-            st.markdown("**🎯 Per-Client Attack Setup:**")
-            
-            # Quick presets
-            preset = st.selectbox("Quick Preset", 
-                                 ["Custom", "2 Scaling", "2 Label-Flip", "Mixed Attacks", "All Malicious"])
-            
+            preset = st.selectbox("Attack Preset:", ["2 Scaling", "2 Label-Flip", "Mixed Attacks", "Custom"])
             if preset == "2 Scaling":
-                for i in range(num_clients):
-                    client_attacks[i] = "scaling" if i < 2 else "none"
+                for i in range(num_clients): client_attacks[i] = "scaling" if i < 2 else "none"
             elif preset == "2 Label-Flip":
-                for i in range(num_clients):
-                    client_attacks[i] = "label_flip" if i < 2 else "none"
+                for i in range(num_clients): client_attacks[i] = "label_flip" if i < 2 else "none"
             elif preset == "Mixed Attacks":
                 attacks = ["scaling", "label_flip", "sign_flip", "none", "none"]
+                for i in range(num_clients): client_attacks[i] = attacks[i] if i < len(attacks) else "none"
+            else:
                 for i in range(num_clients):
-                    client_attacks[i] = attacks[i] if i < len(attacks) else "none"
-            elif preset == "All Malicious":
-                for i in range(num_clients):
-                    client_attacks[i] = "scaling"
-            else:  # Custom
-                for i in range(num_clients):
-                    client_attacks[i] = st.selectbox(
-                        f"Client {i}",
-                        ["none", "scaling", "label_flip", "sign_flip", "backdoor"],
-                        key=f"attack_{i}"
-                    )
-            
-            # Attack parameters
+                    client_attacks[i] = st.selectbox(f"Client {i}:", ["none", "scaling", "label_flip", "sign_flip", "backdoor"], key=f"atk_sel_{i}")
             scale_factor = st.slider("Scaling Factor", 1.0, 100.0, 50.0, 5.0)
-        
         else:
-            for i in range(num_clients):
-                client_attacks[i] = "none"
+            for i in range(num_clients): client_attacks[i] = "none"
 
         st.markdown("---")
-        st.markdown('<span class="cyber-badge cyber-badge-purple">SELF-HEALING</span>', unsafe_allow_html=True)
-        
-        enable_self_healing = st.checkbox("Enable Self-Healing", value=True)
+        st.markdown("**Autonomous Self-Healing**")
+        enable_self_healing = st.checkbox("Enable Self-Healing FSM", value=True)
+        dps_threshold = 0.55
+        recovery_rounds = 3
         if enable_self_healing:
-            dps_threshold = st.slider("DPS Threshold", 0.3, 1.0, 0.55, 0.05,
-                                     help="Normalized DPS threshold [0,1] - Lower = more sensitive")
-            st.info(f"💡 Threshold: {dps_threshold} (0.55=sensitive, 0.65=balanced, 0.75=strict)")
-            recovery_rounds = st.slider("Recovery Rounds", 1, 5, 3)
-        else:
-            dps_threshold = 0.55
-            recovery_rounds = 3
+            dps_threshold = st.slider("DPS Alert Threshold", 0.3, 1.0, 0.55, 0.05)
+            recovery_rounds = st.slider("Recovery Window (Rounds)", 1, 5, 3)
 
         st.markdown("---")
-        
-        # Run button
-        col1, col2 = st.columns(2)
-        with col1:
-            run_clicked = st.button("🚀 EXECUTE", type="primary", use_container_width=True)
-        with col2:
-            reset_clicked = st.button("🔄 RESET", use_container_width=True)
-        
+        c_run, c_rst = st.columns(2)
+        with c_run:
+            run_clicked = st.button("Execute Sim", type="primary", use_container_width=True)
+        with c_rst:
+            reset_clicked = st.button("Reset", use_container_width=True)
+
         if run_clicked:
-            run_simulation(num_clients, num_rounds, random_seed, client_attacks, 
-                          scale_factor, enable_self_healing, dps_threshold, recovery_rounds)
-        
+            with st.spinner("Executing live simulation..."):
+                sim_config = {
+                    "num_clients": num_clients,
+                    "num_rounds": num_rounds,
+                    "random_seed": random_seed,
+                    "enable_attack": enable_attack,
+                    "client_attacks": client_attacks,
+                    "scale_factor": scale_factor,
+                    "enable_self_healing": enable_self_healing,
+                    "dps_threshold": dps_threshold,
+                    "recovery_rounds": recovery_rounds,
+                }
+                simulator = DashboardSimulator(sim_config)
+                results = simulator.run_full_simulation()
+                st.session_state.simulation_run = True
+                st.session_state.simulation_results = results
+                st.rerun()
+
         if reset_clicked:
             st.session_state.simulation_run = False
             st.session_state.simulation_results = None
             st.rerun()
-        
+
         return num_clients, dps_threshold
 
 
-def run_simulation(num_clients, num_rounds, random_seed, client_attacks, 
-                   scale_factor, enable_self_healing, dps_threshold, recovery_rounds):
-    """Run FL simulation with per-client attack configuration."""
-    
-    with st.spinner("🔄 Executing federated simulation..."):
-        config = {
-            'num_clients': num_clients,
-            'num_rounds': num_rounds,
-            'random_seed': random_seed,
-            'enable_attack': any(a != "none" for a in client_attacks.values()),
-            'client_attacks': client_attacks,
-            'scale_factor': scale_factor,
-            'enable_self_healing': enable_self_healing,
-            'dps_threshold': dps_threshold,
-            'recovery_rounds': recovery_rounds
-        }
-        
-        # Run simulation
-        simulator = DashboardSimulator(config)
-        results = simulator.run_full_simulation()
-        
-        st.session_state.simulation_results = results
-        st.session_state.simulation_run = True
-        st.success("✅ Simulation complete!")
-        st.rerun()
-
-
 # ==============================================================================
-# Main Content Area
-# ==============================================================================
-def render_header():
-    """Render main header HUD."""
-    st.markdown("""
-    <div style="display: flex; justify-content: space-between; align-items: flex-end; border-bottom: 1px solid rgba(0, 240, 255, 0.2); padding-bottom: 1rem; margin-bottom: 1.25rem;">
-        <div>
-            <div style="display: flex; gap: 8px; margin-bottom: 6px;">
-                <span class="cyber-badge">CAPS // v2.0</span>
-                <span class="cyber-badge cyber-badge-purple">ASH-FL UNIFIED</span>
-            </div>
-            <h1 style="margin: 0; font-size: 2.2rem;">ADAPTIVE SELF-HEALING FL CONSOLE</h1>
-            <div style="color: #64748b; font-size: 0.88rem; margin-top: 4px;">Real-Time Detection &bull; DPS Analysis &bull; Autonomous Recovery</div>
-        </div>
-        <div style="text-align: right;">
-            <span class="cyber-badge cyber-badge-green">SYSTEM: OPERATIONAL</span>
-            <div style="color: #94a3b8; font-family: 'JetBrains Mono'; font-size: 0.8rem; margin-top: 4px;">UCI Heart Disease &bull; Real DPS (G/C/H/P)</div>
-        </div>
-    </div>
-    """, unsafe_allow_html=True)
-
-
-def render_welcome_screen():
-    """Show welcome screen before simulation runs."""
-    st.markdown("""
-    <div class="cyber-card" style="text-align: center; padding: 3rem;">
-        <h2 style="color: var(--neon-cyan); font-size: 2rem; margin-bottom: 1rem;">🛡️ ASH-FL UNIFIED DASHBOARD</h2>
-        <p style="font-size: 1.1rem; color: var(--text-muted); margin-bottom: 2rem;">
-            Configure your simulation in the sidebar and click <strong style="color: var(--neon-cyan);">EXECUTE</strong> to begin.
-        </p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown("""
-        <div class="cyber-card">
-            <h3 style="color: var(--neon-cyan); font-size: 1.1rem;">🔍 DETECTION</h3>
-            <ul style="color: var(--text-muted); font-size: 0.9rem;">
-                <li>Real-time DPS calculation</li>
-                <li>5 detection signals (G,C,H,P,D)</li>
-                <li>Per-client anomaly analysis</li>
-                <li>Shadow validation (P signal)</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown("""
-        <div class="cyber-card">
-            <h3 style="color: var(--neon-purple); font-size: 1.1rem;">🎯 ATTACKS</h3>
-            <ul style="color: var(--text-muted); font-size: 0.9rem;">
-                <li><strong>Per-client</strong> attack assignment</li>
-                <li>4 attack types available</li>
-                <li>Mix multiple attacks</li>
-                <li>Configurable intensity</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown("""
-        <div class="cyber-card">
-            <h3 style="color: var(--neon-green); font-size: 1.1rem;">🛡️ SELF-HEALING</h3>
-            <ul style="color: var(--text-muted); font-size: 0.9rem;">
-                <li>Automatic attack detection</li>
-                <li>Client quarantine (0.1x weight)</li>
-                <li>Checkpoint restoration</li>
-                <li>FSM-based recovery</li>
-            </ul>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-def render_metrics_ribbon(results):
-    """Render top metrics ribbon."""
-    final_round = results['rounds'][-1]
-    initial_round = results['rounds'][0]
-    
-    final_acc = final_round['metrics']['accuracy']
-    initial_acc = initial_round['metrics']['accuracy']
-    final_loss = final_round['metrics']['loss']
-    initial_loss = initial_round['metrics']['loss']
-    
-    malicious_clients = [cid for cid, is_mal in results['ground_truth'].items() if is_mal]
-    num_malicious = len(malicious_clients)
-    num_clients = len(results['ground_truth'])
-    
-    # FIXED: Get recovery attempts from FSM controller state, not status message parsing
-    recovery_attempts = results.get('recovery_attempts', 0)
-    
-    m1, m2, m3, m4, m5 = st.columns(5)
-    
-    with m1:
-        acc_delta = final_acc - initial_acc
-        delta_color = "var(--neon-green)" if acc_delta > 0 else "var(--neon-red)"
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">FINAL ACCURACY</div>
-            <div class="metric-val">{final_acc:.1%} <span style="font-size: 0.75rem; color: {delta_color};">{acc_delta:+.1%}</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with m2:
-        loss_delta = final_loss - initial_loss
-        delta_color = "var(--neon-green)" if loss_delta < 0 else "var(--neon-red)"
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">FINAL LOSS</div>
-            <div class="metric-val">{final_loss:.3f} <span style="font-size: 0.75rem; color: {delta_color};">{loss_delta:+.3f}</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with m3:
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">MALICIOUS NODES</div>
-            <div class="metric-val">{num_malicious}/{num_clients} <span style="font-size: 0.85rem; color: var(--text-muted);">ACTIVE</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with m4:
-        # Detection rate
-        dps_threshold = results['config'].get('dps_threshold', 0.6)
-        detected = sum(1 for cid in malicious_clients 
-                      if final_round['dps_scores'].get(cid, 0) > dps_threshold)
-        detection_rate = (detected / num_malicious * 100) if num_malicious > 0 else 0
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">DETECTION RATE</div>
-            <div class="metric-val">{detection_rate:.0f}% <span style="font-size: 0.85rem; color: var(--text-muted);">({detected}/{num_malicious})</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with m5:
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">RECOVERY ATTEMPTS</div>
-            <div class="metric-val" style="font-size: 1.6rem; color: var(--neon-purple);">{recovery_attempts} <span style="font-size: 0.75rem; color: var(--text-muted);">TRIGGERED</span></div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-def render_overview_tab(results, dps_threshold, num_clients):
-    """Overview tab with key metrics and charts."""
-    st.markdown("### 📊 SIMULATION OVERVIEW")
-    
-    # Network Topology + Charts
-    col1, col2 = st.columns([1, 1])
-    
-    with col1:
-        st.markdown('<div class="cyber-card" style="padding-bottom: 0.5rem;"><span class="cyber-badge cyber-badge-cyan">FEDERATION TOPOLOGY</span>', unsafe_allow_html=True)
-        
-        # Get malicious clients for visualization
-        malicious_clients = [cid for cid, is_mal in results['ground_truth'].items() if is_mal]
-        
-        # Get final round selected clients
-        final_round = results['rounds'][-1]
-        selected_clients = final_round.get('selected_clients', list(range(num_clients)))
-        
-        # Create topology figure
-        fig_topo = create_topology_figure(num_clients, selected_clients, malicious_clients, results)
-        st.plotly_chart(fig_topo, use_container_width=True, key="topology_chart")
-        
-        # Legend
-        st.markdown("""
-        <div style="font-size: 0.8rem; color: #94a3b8; margin-top: -10px; padding: 0 10px;">
-            <strong>Legend:</strong><br/>
-            🟢 Active Honest | ⚫ Standby | ❌ Malicious (intensity = DPS) | 🔷 Central Server
-        </div>
-        """, unsafe_allow_html=True)
-        
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown('<div class="cyber-card" style="padding-bottom: 0.5rem;"><span class="cyber-badge cyber-badge-green">ACCURACY TRAJECTORY</span>', unsafe_allow_html=True)
-        fig = create_accuracy_chart(results)
-        fig.update_layout(
-            paper_bgcolor="rgba(13, 17, 27, 0.75)",
-            plot_bgcolor="rgba(0,0,0,0)",
-            font=dict(family="Space Grotesk", color="#94a3b8"),
-        )
-        st.plotly_chart(fig, use_container_width=True, key="accuracy_chart_overview")
-        st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Loss chart full width
-    st.markdown('<div class="cyber-card" style="padding-bottom: 0.5rem;"><span class="cyber-badge cyber-badge-green">LOSS CONVERGENCE</span>', unsafe_allow_html=True)
-    fig = create_loss_chart(results)
-    fig.update_layout(
-        paper_bgcolor="rgba(13, 17, 27, 0.75)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Space Grotesk", color="#94a3b8"),
-    )
-    st.plotly_chart(fig, use_container_width=True, key="loss_chart_overview")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Accuracy Analysis Section
-    st.markdown("### 📈 ACCURACY ANALYSIS")
-    
-    # Compute accuracy phases
-    accuracies = [r['metrics']['accuracy'] for r in results['rounds']]
-    malicious_clients = [cid for cid, is_mal in results['ground_truth'].items() if is_mal]
-    has_attacks = len(malicious_clients) > 0
-    self_healing_enabled = results.get('config', {}).get('enable_self_healing', False)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        clean_acc = accuracies[0] if len(accuracies) > 0 else 0.0
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">INITIAL (CLEAN)</div>
-            <div class="metric-val" style="color: var(--neon-green);">{clean_acc:.1%}</div>
-            <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Round 1 baseline</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        if has_attacks and len(accuracies) > 3:
-            # Find lowest accuracy (likely during attack)
-            attack_acc = min(accuracies[1:])  # Skip initial
-            st.markdown(f"""
-            <div class="cyber-card">
-                <div class="metric-sub">LOWEST (ATTACK)</div>
-                <div class="metric-val" style="color: var(--neon-red);">{attack_acc:.1%}</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Degradation: {(clean_acc - attack_acc):.1%}</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="cyber-card">
-                <div class="metric-sub">LOWEST (ATTACK)</div>
-                <div class="metric-val" style="color: var(--text-muted);">N/A</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">No attacks</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    with col3:
-        final_acc = accuracies[-1] if len(accuracies) > 0 else 0.0
-        if has_attacks and self_healing_enabled:
-            recovery_pct = (final_acc / clean_acc * 100) if clean_acc > 0 else 0
-            recovery_color = "var(--neon-green)" if recovery_pct >= 95 else "var(--neon-cyan)"
-            st.markdown(f"""
-            <div class="cyber-card">
-                <div class="metric-sub">FINAL (RECOVERY)</div>
-                <div class="metric-val" style="color: {recovery_color};">{final_acc:.1%}</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Recovery: {recovery_pct:.0f}% of clean</div>
-            </div>
-            """, unsafe_allow_html=True)
-        else:
-            st.markdown(f"""
-            <div class="cyber-card">
-                <div class="metric-sub">FINAL</div>
-                <div class="metric-val" style="color: var(--neon-cyan);">{final_acc:.1%}</div>
-                <div style="font-size: 0.75rem; color: var(--text-muted); margin-top: 0.25rem;">Improvement: {(final_acc - clean_acc):.1%}</div>
-            </div>
-            """, unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Ground truth table
-    st.markdown("### 🎯 GROUND TRUTH & DETECTION STATUS")
-    
-    final_round = results['rounds'][-1]
-    gt_data = []
-    
-    for cid in sorted(results['ground_truth'].keys()):
-        is_mal = results['ground_truth'][cid]
-        final_dps = final_round['dps_scores'].get(cid, 0)
-        
-        # Get attack type
-        attack_type = "None"
-        if is_mal and 'client_attacks' in results.get('config', {}):
-            attack_type = results['config']['client_attacks'].get(cid, "unknown")
-            attack_type = attack_type.replace("_", " ").title()
-        
-        status = "🔴 MALICIOUS" if is_mal else "✅ HONEST"
-        detected = final_dps > dps_threshold
-        detection_status = "✅ DETECTED" if (is_mal and detected) else ("❌ MISSED" if is_mal else "✅ CORRECT")
-        
-        gt_data.append({
-            "Client ID": f"Client {cid}",
-            "Status": status,
-            "Attack Type": attack_type,
-            "Final DPS": f"{final_dps:.3f}",
-            "Detection": detection_status
-        })
-    
-    gt_df = pd.DataFrame(gt_data)
-    st.dataframe(gt_df, use_container_width=True, hide_index=True)
-
-
-def render_dps_tab(results, dps_threshold):
-    """DPS analysis tab."""
-    st.markdown("### 🔍 DYNAMIC POISONING SCORE ANALYSIS")
-    
-    final_round = results['rounds'][-1]
-    
-    # DPS Deep Dive
-    st.markdown("#### 📡 Signal Breakdown (Final Round)")
-    
-    dps_breakdown = []
-    for cid in sorted(results['ground_truth'].keys()):
-        is_mal = results['ground_truth'][cid]
-        dps = final_round['dps_scores'].get(cid, 0)
-        
-        # Get individual signals
-        G = final_round.get('G_scores', {}).get(cid, 0)
-        C = final_round.get('C_scores', {}).get(cid, 0)
-        H = final_round.get('H_scores', {}).get(cid, 0)
-        P = final_round.get('P_scores', {}).get(cid, 0)
-        D = final_round.get('D_scores', {}).get(cid, 0)
-        
-        status = "🔴 Malicious" if is_mal else "✅ Honest"
-        flagged = "⚠️ FLAGGED" if dps > dps_threshold else "✓ NORMAL"
-        
-        dps_breakdown.append({
-            "Client": f"Client {cid}",
-            "Status": status,
-            "DPS": f"{dps:.3f}",
-            "G": f"{G:.3f}",
-            "C": f"{C:.3f}",
-            "H": f"{H:.3f}",
-            "P": f"{P:.3f}",
-            "D": f"{D:.3f}",
-            "Flag": flagged
-        })
-    
-    dps_df = pd.DataFrame(dps_breakdown)
-    st.dataframe(dps_df, use_container_width=True, hide_index=True)
-    
-    st.markdown("---")
-    
-    # Radar charts
-    st.markdown("#### 🎯 Signal Radar (Malicious Clients)")
-    
-    malicious_clients = [cid for cid, is_mal in results['ground_truth'].items() if is_mal]
-    
-    if malicious_clients:
-        cols = st.columns(min(3, len(malicious_clients)))
-        for idx, cid in enumerate(malicious_clients[:3]):
-            with cols[idx]:
-                st.markdown(f'<div class="cyber-card" style="padding: 0.75rem;"><span class="cyber-badge cyber-badge-red">CLIENT {cid}</span>', unsafe_allow_html=True)
-                fig = create_dps_radar(results, cid)
-                fig.update_layout(
-                    paper_bgcolor="rgba(13, 17, 27, 0.75)",
-                    plot_bgcolor="rgba(0,0,0,0)",
-                    font=dict(family="Space Grotesk", color="#94a3b8", size=10),
-                    height=250
-                )
-                st.plotly_chart(fig, use_container_width=True, key=f"radar_chart_client_{cid}")
-                st.markdown('</div>', unsafe_allow_html=True)
-    else:
-        st.info("No malicious clients in this simulation.")
-
-
-def render_selfhealing_tab(results):
-    """Self-healing tab."""
-    st.markdown("### 🛡️ SELF-HEALING MONITOR")
-    
-    # FSM state timeline
-    st.markdown("#### 🔄 State Machine Timeline")
-    
-    timeline_data = []
-    for round_info in results['rounds']:
-        round_num = round_info['round']
-        state = round_info.get('state', 'NORMAL')  # Fixed: was 'fsm_state'
-        quarantined = round_info.get('quarantined', [])  # Fixed: was 'quarantined_clients'
-        
-        state_badge_colors = {
-            'NORMAL': 'cyber-badge-green',
-            'MONITOR': 'cyber-badge',
-            'RECOVERY': 'cyber-badge-red',
-            'VALIDATE': 'cyber-badge-purple',
-            'RESUME': 'cyber-badge-green'
-        }
-        
-        badge_class = state_badge_colors.get(state, 'cyber-badge')
-        
-        timeline_data.append({
-            "Round": round_num,
-            "FSM State": state,
-            "Quarantined": len(quarantined),
-            "Clients": ', '.join(map(str, quarantined)) if quarantined else '-'
-        })
-    
-    timeline_df = pd.DataFrame(timeline_data)
-    st.dataframe(timeline_df, use_container_width=True, hide_index=True)
-    
-    st.markdown("---")
-    
-    # Trust evolution
-    st.markdown("#### 📈 Trust Score Evolution")
-    
-    st.markdown('<div class="cyber-card" style="padding-bottom: 0.5rem;">', unsafe_allow_html=True)
-    fig = create_trust_evolution(results)
-    fig.update_layout(
-        paper_bgcolor="rgba(13, 17, 27, 0.75)",
-        plot_bgcolor="rgba(0,0,0,0)",
-        font=dict(family="Space Grotesk", color="#94a3b8"),
-    )
-    st.plotly_chart(fig, use_container_width=True, key="trust_evolution_chart")
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Aggregation weights visualization
-    st.markdown("#### ⚖️ Aggregation Weights (Per-Client)")
-    
-    st.markdown('<div class="cyber-card" style="padding: 1rem;">', unsafe_allow_html=True)
-    st.markdown("""
-    <span style="color: var(--text-muted); font-size: 0.85rem;">
-    Effective weights applied during model aggregation. Quarantined clients receive 0.05-0.1× weight.
-    </span>
-    """, unsafe_allow_html=True)
-    
-    # Create weights table for final round
-    final_round = results['rounds'][-1]
-    agg_weights = final_round.get('aggregation_weights', {})
-    dps_scores = final_round.get('dps_scores', {})
-    trust_scores = final_round.get('trust_scores', {})
-    quarantined = final_round.get('quarantined', [])
-    
-    weights_data = []
-    for cid in sorted(results['ground_truth'].keys()):
-        is_mal = results['ground_truth'][cid]
-        weight = agg_weights.get(cid, 1.0 / len(results['ground_truth']))
-        dps = dps_scores.get(cid, 0.0)
-        trust = trust_scores.get(cid, 1.0)
-        is_quarantined = cid in quarantined
-        
-        status = "🔴 Malicious" if is_mal else "✅ Honest"
-        quar_status = "⚠️ QUARANTINED" if is_quarantined else "✓ Active"
-        
-        weights_data.append({
-            "Client": f"Client {cid}",
-            "Ground Truth": status,
-            "Status": quar_status,
-            "Trust": f"{trust:.3f}",
-            "DPS": f"{dps:.3f}",
-            "Agg Weight": f"{weight:.4f}",
-            "Relative %": f"{weight * 100:.1f}%"
-        })
-    
-    weights_df = pd.DataFrame(weights_data)
-    st.dataframe(weights_df, use_container_width=True, hide_index=True)
-    
-    st.markdown("""
-    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: var(--text-muted);">
-    <strong>Key:</strong> Quarantined clients have weight ≈ 0.05-0.1 (5-10% of honest clients). 
-    Trust and DPS scores influence final aggregation weights.
-    </div>
-    """, unsafe_allow_html=True)
-    st.markdown('</div>', unsafe_allow_html=True)
-    
-    st.markdown("---")
-    
-    # Summary stats
-    st.markdown("#### 📊 Recovery Summary")
-    
-    recovery_attempts = results.get('recovery_attempts', 0)
-    checkpoint_count = results.get('checkpoint_count', 0)
-    
-    col1, col2, col3 = st.columns(3)
-    
-    with col1:
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">RECOVERY ATTEMPTS</div>
-            <div class="metric-val" style="color: var(--neon-purple);">{recovery_attempts}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">CHECKPOINTS CREATED</div>
-            <div class="metric-val" style="color: var(--neon-cyan);">{checkpoint_count}</div>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        final_state = results['rounds'][-1].get('state', 'UNKNOWN')  # Fixed: was 'fsm_state'
-        state_color = "var(--neon-green)" if final_state in ['NORMAL', 'RESUME'] else "var(--neon-red)"
-        st.markdown(f"""
-        <div class="cyber-card">
-            <div class="metric-sub">FINAL STATE</div>
-            <div class="metric-val" style="font-size: 1.3rem; color: {state_color};">{final_state}</div>
-        </div>
-        """, unsafe_allow_html=True)
-
-
-def render_explanations_tab():
-    """Educational explanations."""
-    st.markdown("### 📚 EXPLANATIONS")
-    
-    explanations = get_explanation_content()
-    
-    for title, content in explanations.items():
-        with st.expander(title):
-            st.markdown(content)
-
-
-# ==============================================================================
-# Main Execution
+# Main Entry Point
 # ==============================================================================
 def main():
-    """Main application entry point."""
-    render_header()
-    
+    """Main dashboard application entry point."""
+    if "simulation_run" not in st.session_state:
+        st.session_state.simulation_run = False
+    if "simulation_results" not in st.session_state:
+        st.session_state.simulation_results = None
+
     num_clients, dps_threshold = render_sidebar()
-    
-    if not st.session_state.simulation_run:
-        render_welcome_screen()
-    else:
-        results = st.session_state.simulation_results
-        
-        # Metrics ribbon
-        render_metrics_ribbon(results)
-        
-        # Tabs
-        tab1, tab2, tab3, tab4 = st.tabs([
-            "📊 OVERVIEW",
-            "🔍 DPS ANALYSIS", 
-            "🛡️ SELF-HEALING",
-            "📚 EXPLANATIONS"
-        ])
-        
-        with tab1:
-            render_overview_tab(results, dps_threshold, num_clients)
-        
-        with tab2:
-            render_dps_tab(results, dps_threshold)
-        
-        with tab3:
-            render_selfhealing_tab(results)
-        
-        with tab4:
-            render_explanations_tab()
+
+    current_attack = st.session_state.get("comparison_attack_label", "Label Flip")
+    render_header(current_attack)
+
+    # Primary tabs: Defense Benchmark (Default) & Interactive Simulation
+    tab_benchmark, tab_simulation = st.tabs([
+        "📊 Defense Benchmark",
+        "🧪 Interactive Simulation",
+    ])
+
+    with tab_benchmark:
+        render_defense_comparison()
+
+    with tab_simulation:
+        render_interactive_simulation(num_clients, dps_threshold)
 
 
 if __name__ == "__main__":

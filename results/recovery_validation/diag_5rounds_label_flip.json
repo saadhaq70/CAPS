@@ -1,0 +1,629 @@
+{
+  "attack_type": "label_flip",
+  "config": {
+    "num_clients": 5,
+    "num_rounds": 5,
+    "local_epochs": 3,
+    "batch_size": 16,
+    "learning_rate": 0.01,
+    "random_seed": 42,
+    "dataset_id": 45,
+    "test_split": 0.2,
+    "iid": true,
+    "input_dim": 13,
+    "hidden_dim": 32,
+    "output_dim": 1,
+    "attack_type": "none",
+    "malicious_client_ids": [
+      1,
+      2
+    ],
+    "scale_factor": 50.0,
+    "source_label": 0,
+    "target_label": 1,
+    "trigger_feature_indices": [
+      0,
+      1
+    ],
+    "trigger_value": 1.0,
+    "poison_fraction": 0.3,
+    "backdoor_target_label": 1
+  },
+  "defense_results": {
+    "Multi-Krum": {
+      "defense_name": "Multi-Krum",
+      "attack_type": "label_flip",
+      "initial_accuracy": 0.6666666666666666,
+      "initial_loss": 0.6841420531272888,
+      "per_round_accuracy": [
+        0.8666666666666667,
+        0.9,
+        0.9,
+        0.8666666666666667,
+        0.8666666666666667
+      ],
+      "per_round_loss": [
+        0.548557698726654,
+        0.388929158449173,
+        0.32228386402130127,
+        0.3030698001384735,
+        0.2956337034702301
+      ],
+      "final_accuracy": 0.8666666666666667,
+      "final_loss": 0.2956337034702301,
+      "clean_accuracy": 0.9,
+      "attacked_accuracy": 0.8666666666666667,
+      "accuracy_degradation": 0.033333333333333326,
+      "backdoor_asr": null,
+      "per_round_backdoor_asr": null,
+      "defense_type": "robust_aggregation",
+      "supports_self_healing": false,
+      "supports_explicit_detection": false,
+      "per_round_defense_metrics": [
+        {
+          "selected_clients": [
+            3,
+            4,
+            0,
+            2
+          ],
+          "excluded_clients": [
+            1
+          ],
+          "krum_scores": {
+            "0": 6.091868877410889,
+            "1": 7.509955406188965,
+            "2": 6.791341781616211,
+            "3": 5.507665395736694,
+            "4": 6.009307146072388
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.0,
+            "2": 0.25,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        },
+        {
+          "selected_clients": [
+            3,
+            0,
+            4,
+            2
+          ],
+          "excluded_clients": [
+            1
+          ],
+          "krum_scores": {
+            "0": 5.290113925933838,
+            "1": 8.933677792549133,
+            "2": 8.163560509681702,
+            "3": 5.039092063903809,
+            "4": 5.382435321807861
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.0,
+            "2": 0.25,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        },
+        {
+          "selected_clients": [
+            3,
+            4,
+            0,
+            2
+          ],
+          "excluded_clients": [
+            1
+          ],
+          "krum_scores": {
+            "0": 6.409039258956909,
+            "1": 9.336925148963928,
+            "2": 8.672325253486633,
+            "3": 5.953561067581177,
+            "4": 6.250046730041504
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.0,
+            "2": 0.25,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        },
+        {
+          "selected_clients": [
+            3,
+            4,
+            0,
+            2
+          ],
+          "excluded_clients": [
+            1
+          ],
+          "krum_scores": {
+            "0": 7.648865699768066,
+            "1": 8.930706560611725,
+            "2": 8.203564703464508,
+            "3": 6.620729684829712,
+            "4": 7.019780397415161
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.0,
+            "2": 0.25,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        },
+        {
+          "selected_clients": [
+            3,
+            4,
+            2,
+            0
+          ],
+          "excluded_clients": [
+            1
+          ],
+          "krum_scores": {
+            "0": 7.167934894561768,
+            "1": 7.381240606307983,
+            "2": 7.123750448226929,
+            "3": 6.68109655380249,
+            "4": 6.714008331298828
+          },
+          "aggregation_weights": {
+            "0": 0.25,
+            "1": 0.0,
+            "2": 0.25,
+            "3": 0.25,
+            "4": 0.25
+          },
+          "f_byzantine": 1,
+          "m_selected": 4,
+          "num_neighbors": 2
+        }
+      ],
+      "recovery_metrics": {}
+    },
+    "ASH-FL": {
+      "defense_name": "ASH-FL (Primary Default)",
+      "attack_type": "label_flip",
+      "initial_accuracy": 0.6666666666666666,
+      "initial_loss": 0.6841420531272888,
+      "per_round_accuracy": [
+        0.5333333333333333,
+        0.8666666666666667,
+        0.8666666666666667,
+        0.8666666666666667,
+        0.9
+      ],
+      "per_round_loss": [
+        0.5835334658622742,
+        0.4668651521205902,
+        0.3774324059486389,
+        0.4184545576572418,
+        0.41582074761390686
+      ],
+      "final_accuracy": 0.9,
+      "final_loss": 0.41582074761390686,
+      "clean_accuracy": 0.8666666666666667,
+      "attacked_accuracy": 0.5333333333333333,
+      "accuracy_degradation": -0.033333333333333326,
+      "backdoor_asr": null,
+      "per_round_backdoor_asr": null,
+      "defense_type": "self_healing",
+      "supports_self_healing": true,
+      "supports_explicit_detection": true,
+      "per_round_defense_metrics": [
+        {
+          "dps_scores": {
+            "0": 0.14998374511960486,
+            "1": 0.3727461547318049,
+            "2": 0.3686542535033951,
+            "3": 0.14373278727296332,
+            "4": 0.1428169523692463
+          },
+          "trust_scores": {
+            "0": 0.9850016254880395,
+            "1": 0.9627253845268195,
+            "2": 0.9631345746496605,
+            "3": 0.9856267212727037,
+            "4": 0.9857183047630753
+          },
+          "aggregation_weights": {
+            "0": 0.20429326020276117,
+            "1": 0.1885746042963993,
+            "2": 0.1888552799178613,
+            "3": 0.20474738601840797,
+            "4": 0.21352946956457022
+          },
+          "G_scores": {
+            "0": 0.31002551887238755,
+            "1": 0.31002551887238755,
+            "2": 0.31002551887238755,
+            "3": 0.31002551887238755,
+            "4": 0.31002551887238755
+          },
+          "C_scores": {
+            "0": 0.06304430961608887,
+            "1": 0.07084035873413086,
+            "2": 0.061998844146728516,
+            "3": 0.039892613887786865,
+            "4": 0.036500632762908936
+          },
+          "H_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "P_scores": {
+            "0": 0.18242552380635635,
+            "1": 0.999675436214981,
+            "2": 0.9933617610675324,
+            "3": 0.18242552380635635,
+            "4": 0.18242552380635635
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "NORMAL",
+          "quarantined_clients": [],
+          "recovery_attempts": 0,
+          "checkpoint_count": 0,
+          "status_message": "Healthy operation",
+          "is_recovering": false,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        },
+        {
+          "dps_scores": {
+            "0": 0.1464593385672901,
+            "1": 0.3967574950353451,
+            "2": 0.37800036433551737,
+            "3": 0.14027050068143349,
+            "4": 0.14119684448007086
+          },
+          "trust_scores": {
+            "0": 0.9705753568323712,
+            "1": 0.9245285333296396,
+            "2": 0.9267280526374899,
+            "3": 0.9718012859049115,
+            "4": 0.9718002733451963
+          },
+          "aggregation_weights": {
+            "0": 0.20823566194370582,
+            "1": 0.18179234839553876,
+            "2": 0.18319378719473806,
+            "3": 0.20895874769251832,
+            "4": 0.21781945477349912
+          },
+          "G_scores": {
+            "0": 0.31002551887238755,
+            "1": 0.3715244276216364,
+            "2": 0.31628218974004296,
+            "3": 0.31002551887238755,
+            "4": 0.31002551887238755
+          },
+          "C_scores": {
+            "0": 0.049990952014923096,
+            "1": 0.09794777631759644,
+            "2": 0.08371919393539429,
+            "3": 0.0270693302154541,
+            "4": 0.03050023317337036
+          },
+          "H_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "P_scores": {
+            "0": 0.18242552380635635,
+            "1": 0.9999999998953784,
+            "2": 0.9999999657153676,
+            "3": 0.18242552380635635,
+            "4": 0.18242552380635635
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "NORMAL",
+          "quarantined_clients": [],
+          "recovery_attempts": 0,
+          "checkpoint_count": 1,
+          "status_message": "Healthy operation",
+          "is_recovering": false,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        },
+        {
+          "dps_scores": {
+            "0": 0.3020843529207468,
+            "1": 0.5818713822257784,
+            "2": 0.5700919130721023,
+            "3": 0.2966397652913702,
+            "4": 0.292636485183269
+          },
+          "trust_scores": {
+            "0": 0.9412557939694182,
+            "1": 0.8707328637700708,
+            "2": 0.8738960357949208,
+            "3": 0.9429737953688431,
+            "4": 0.9433618517160085
+          },
+          "aggregation_weights": {
+            "0": 0.2128219712070187,
+            "1": 0.17430118144811987,
+            "2": 0.1758993606927682,
+            "3": 0.21377947849714285,
+            "4": 0.22319800815495033
+          },
+          "G_scores": {
+            "0": 0.299707254810666,
+            "1": 0.444946786579536,
+            "2": 0.4026859002484536,
+            "3": 0.28751136843293024,
+            "4": 0.2979781892629876
+          },
+          "C_scores": {
+            "0": 0.04173707962036133,
+            "1": 0.10641741752624512,
+            "2": 0.09781664609909058,
+            "3": 0.02819901704788208,
+            "4": 0.022744953632354736
+          },
+          "H_scores": {
+            "0": 0.8454710062981748,
+            "1": 0.8579107743011446,
+            "2": 0.8681906608329762,
+            "3": 0.8533845778096562,
+            "4": 0.8251912903884756
+          },
+          "P_scores": {
+            "0": 0.18242552380635635,
+            "1": 1.0,
+            "2": 0.9999999999999996,
+            "3": 0.18242552380635635,
+            "4": 0.18242552380635635
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "MONITOR",
+          "quarantined_clients": [],
+          "recovery_attempts": 0,
+          "checkpoint_count": 2,
+          "status_message": "Degradation detected, entering monitoring",
+          "is_recovering": false,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        },
+        {
+          "dps_scores": {
+            "0": 0.28484488497771,
+            "1": 0.5122225521224142,
+            "2": 0.5025460547264848,
+            "3": 0.2971382965528287,
+            "4": 0.26889441385751883
+          },
+          "trust_scores": {
+            "0": 0.914444604132636,
+            "1": 0.8261319628003543,
+            "2": 0.8299787352919356,
+            "3": 0.9149544326438577,
+            "4": 0.9179953784987366
+          },
+          "aggregation_weights": {
+            "0": 0.3114425644164686,
+            "1": 0.024532066813686332,
+            "2": 0.024798949281374705,
+            "3": 0.3111983229401203,
+            "4": 0.3280280965483501
+          },
+          "G_scores": {
+            "0": 0.31002551887238755,
+            "1": 0.4011474458405368,
+            "2": 0.361472696026015,
+            "3": 0.31002551887238755,
+            "4": 0.2620415367114566
+          },
+          "C_scores": {
+            "0": 0.040672361850738525,
+            "1": 0.0877143144607544,
+            "2": 0.07644879817962646,
+            "3": 0.03336656093597412,
+            "4": 0.023781120777130127
+          },
+          "H_scores": {
+            "0": 0.741587188182893,
+            "1": 0.5801572465319236,
+            "2": 0.601617112057693,
+            "3": 0.8166712819834464,
+            "4": 0.7498284468836011
+          },
+          "P_scores": {
+            "0": 0.18242552380635635,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 0.18242552380635635,
+            "4": 0.18242552380635635
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "RECOVERY",
+          "quarantined_clients": [
+            1,
+            2
+          ],
+          "recovery_attempts": 1,
+          "checkpoint_count": 2,
+          "status_message": "Restored checkpoint from round 3",
+          "is_recovering": true,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        },
+        {
+          "dps_scores": {
+            "0": 0.24197281584955807,
+            "1": 0.4862829847648815,
+            "2": 0.4831343653328471,
+            "3": 0.2546117051957795,
+            "4": 0.29087720249074295
+          },
+          "trust_scores": {
+            "0": 0.8923175305525951,
+            "1": 0.7859585711323316,
+            "2": 0.7898796103404327,
+            "3": 0.8916586218166687,
+            "4": 0.8912929857390223
+          },
+          "aggregation_weights": {
+            "0": 0.31455513601080665,
+            "1": 0.023493057810911308,
+            "2": 0.023739830168577156,
+            "3": 0.31348072535744786,
+            "4": 0.32473125065225705
+          },
+          "G_scores": {
+            "0": 0.31002551887238755,
+            "1": 0.37810942187541396,
+            "2": 0.36727828067808105,
+            "3": 0.31002551887238755,
+            "4": 0.21281504398227796
+          },
+          "C_scores": {
+            "0": 0.03419238328933716,
+            "1": 0.08426541090011597,
+            "2": 0.0806809663772583,
+            "3": 0.0385017991065979,
+            "4": 0.01937258243560791
+          },
+          "H_scores": {
+            "0": 0.5251531096746114,
+            "1": 0.4812725258709915,
+            "2": 0.4851861506731865,
+            "3": 0.5855496732301958,
+            "4": 0.941745536474724
+          },
+          "P_scores": {
+            "0": 0.18242552380635635,
+            "1": 1.0,
+            "2": 1.0,
+            "3": 0.18242552380635635,
+            "4": 0.18242552380635635
+          },
+          "D_scores": {
+            "0": 0.0,
+            "1": 0.0,
+            "2": 0.0,
+            "3": 0.0,
+            "4": 0.0
+          },
+          "fsm_state": "RECOVERY",
+          "quarantined_clients": [
+            1,
+            2
+          ],
+          "recovery_attempts": 1,
+          "checkpoint_count": 2,
+          "status_message": "Recovery in progress (1/3)",
+          "is_recovering": true,
+          "optional_multi_krum_active": false,
+          "optional_trimmed_mean_active": false,
+          "optional_fltrust_active": false,
+          "krum_selected": [],
+          "krum_excluded": [],
+          "fltrust_cosines": {}
+        }
+      ],
+      "recovery_metrics": {
+        "recovery_attempts": 1,
+        "checkpoint_count": 2,
+        "final_fsm_state": "RECOVERY",
+        "quarantined_clients": [
+          1,
+          2
+        ],
+        "recovery_triggered": true
+      }
+    }
+  },
+  "summary_table": [
+    {
+      "Defense": "Multi-Krum",
+      "Type": "Robust Aggregation",
+      "Final Accuracy": "86.7%",
+      "Accuracy Drop": "+3.3%",
+      "Final Loss": "0.2956",
+      "Backdoor ASR": "N/A",
+      "Explicit Detection": "N/A (Robust Agg)",
+      "Self-Healing": "N/A",
+      "Recovery Status": "N/A"
+    },
+    {
+      "Defense": "ASH-FL",
+      "Type": "Self Healing",
+      "Final Accuracy": "90.0%",
+      "Accuracy Drop": "-3.3%",
+      "Final Loss": "0.4158",
+      "Backdoor ASR": "N/A",
+      "Explicit Detection": "Available",
+      "Self-Healing": "YES (Autonomous FSM)",
+      "Recovery Status": "Attempts: 1 | State: RECOVERY"
+    }
+  ]
+}

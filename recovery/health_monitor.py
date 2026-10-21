@@ -20,6 +20,9 @@ class HealthMonitor:
         suspicious_fraction_threshold: float = 0.3,
         model_drift_threshold: float = 5.0,
         baseline_window: int = 3,
+        persistent_dps_threshold: float = 0.45,
+        persistent_trust_threshold: float = 0.85,
+        persistent_rounds: int = 2,
     ):
         """
         Args:
@@ -29,6 +32,9 @@ class HealthMonitor:
             suspicious_fraction_threshold: Trigger if this fraction of clients are suspicious
             model_drift_threshold: L2 distance from last trusted model threshold
             baseline_window: Number of rounds to use for rolling baseline
+            persistent_dps_threshold: DPS threshold for persistent malicious client detection
+            persistent_trust_threshold: Maximum trust score to confirm persistent malicious client
+            persistent_rounds: Consecutive rounds required for persistent malicious detection
         """
         self.accuracy_drop_threshold = accuracy_drop_threshold
         self.loss_spike_threshold = loss_spike_threshold
@@ -36,6 +42,9 @@ class HealthMonitor:
         self.suspicious_fraction_threshold = suspicious_fraction_threshold
         self.model_drift_threshold = model_drift_threshold
         self.baseline_window = baseline_window
+        self.persistent_dps_threshold = persistent_dps_threshold
+        self.persistent_trust_threshold = persistent_trust_threshold
+        self.persistent_rounds = persistent_rounds
 
         # History tracking
         self.accuracy_history: List[float] = []
@@ -96,11 +105,51 @@ class HealthMonitor:
             total_dist += np.sum((p_curr - p_trust) ** 2)
         return float(np.sqrt(total_dist))
 
+    def get_persistent_suspicious_clients(
+        self, reputation: Optional[Dict[int, float]] = None
+    ) -> List[int]:
+        """
+        Identify clients exhibiting persistent suspicious behavior across consecutive rounds.
+        A client is flagged if:
+          1. Their DPS exceeds persistent_dps_threshold for at least persistent_rounds consecutive rounds.
+          2. Their reputation/trust score is <= persistent_trust_threshold (dual-gate requirement).
+             Default trust is 1.0 (clean) if not provided in reputation dict.
+
+        Args:
+            reputation: Client trust/reputation mapping (client_id -> trust in [0.01, 1.0])
+
+        Returns:
+            List of client IDs confirmed as persistently suspicious.
+        """
+        if len(self.dps_history) < self.persistent_rounds:
+            return []
+
+        recent_dps_rounds = self.dps_history[-self.persistent_rounds:]
+        current_dps = recent_dps_rounds[-1]
+        suspicious_clients: List[int] = []
+
+        for cid in current_dps.keys():
+            # Check consecutive rounds of elevated DPS
+            is_consecutively_high = all(
+                cid in round_dps and round_dps[cid] > self.persistent_dps_threshold
+                for round_dps in recent_dps_rounds
+            )
+            if not is_consecutively_high:
+                continue
+
+            # Check reputation / trust condition (dual-gate to prevent false positives)
+            client_trust = reputation.get(cid, 1.0) if reputation else 1.0
+            if client_trust <= self.persistent_trust_threshold:
+                suspicious_clients.append(cid)
+
+        return suspicious_clients
+
     def should_trigger_recovery(
         self,
         metrics: Dict[str, float],
         dps_dict: Optional[Dict[int, float]] = None,
         current_params: Optional[List[np.ndarray]] = None,
+        reputation: Optional[Dict[int, float]] = None,
     ) -> bool:
         """
         Determine if recovery should be triggered based on health signals.
@@ -109,6 +158,7 @@ class HealthMonitor:
             metrics: Current round metrics (must include 'accuracy' and 'loss')
             dps_dict: Dynamic Poisoning Scores per client
             current_params: Current global model parameters
+            reputation: Client trust/reputation scores (optional, for persistent detection)
 
         Returns:
             True if recovery should be triggered, False otherwise
@@ -175,6 +225,16 @@ class HealthMonitor:
                 )
                 return True
 
+            # Check 3b: Persistent suspicious clients (Option C)
+            persistent_suspicious = self.get_persistent_suspicious_clients(reputation)
+            if persistent_suspicious:
+                print(
+                    f"  [HealthMonitor] Persistent suspicious clients detected: {persistent_suspicious} "
+                    f"(DPS > {self.persistent_dps_threshold} for {self.persistent_rounds}+ consecutive rounds, "
+                    f"trust <= {self.persistent_trust_threshold})"
+                )
+                return True
+
         # Check 4: Model drift
         if current_params is not None:
             drift = self.compute_model_drift(current_params)
@@ -200,6 +260,7 @@ class HealthMonitor:
         self,
         metrics: Dict[str, float],
         dps_dict: Optional[Dict[int, float]] = None,
+        reputation: Optional[Dict[int, float]] = None,
     ) -> bool:
         """
         Check if current state is healthy (for checkpoint saving).
@@ -207,6 +268,7 @@ class HealthMonitor:
         Args:
             metrics: Current metrics
             dps_dict: Current DPS scores
+            reputation: Client trust/reputation scores (optional)
 
         Returns:
             True if state is healthy
@@ -222,6 +284,10 @@ class HealthMonitor:
         if dps_dict:
             avg_dps = np.mean(list(dps_dict.values()))
             if avg_dps > self.dps_threshold:
+                return False
+
+            # Persistent suspicious clients also indicate unhealthy state
+            if self.get_persistent_suspicious_clients(reputation):
                 return False
 
         # Check against baseline (if available)
