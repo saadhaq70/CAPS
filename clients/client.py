@@ -60,7 +60,9 @@ def get_model_parameters(model: nn.Module) -> List[np.ndarray]:
     Returns:
         List of parameter arrays
     """
-    return [param.cpu().detach().numpy() for param in model.parameters()]
+    # Uses .clone() to ensure returned arrays NEVER share underlying memory buffers
+    # with PyTorch model parameters, preventing unintended in-place mutations.
+    return [param.cpu().detach().clone().numpy() for param in model.parameters()]
 
 
 def set_model_parameters(model: nn.Module, parameters: List[np.ndarray]) -> None:
