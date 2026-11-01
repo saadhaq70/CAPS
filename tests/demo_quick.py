@@ -22,7 +22,7 @@ print("\nStep 1: Testing data loading...")
 
 from clients.data_loader import HeartDiseaseDataLoader
 
-loader = HeartDiseaseDataLoader(dataset_id=45, random_seed=42, test_split=0.2)
+loader = HeartDiseaseDataLoader(random_seed=42, test_split=0.2)
 federated_data = loader.get_federated_data(num_clients=3, iid=True)
 
 print(f"✓ Dataset loaded: {len(federated_data['client_data'])} clients")

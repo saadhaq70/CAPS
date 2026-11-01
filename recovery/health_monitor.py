@@ -16,23 +16,24 @@ class HealthMonitor:
         self,
         accuracy_drop_threshold: float = 0.15,
         loss_spike_threshold: float = 0.3,
-        dps_threshold: float = 0.55,  # IMPROVED: Lowered from 2.0 to 0.55 (normalized)
+        dps_threshold: float = 0.55,
         suspicious_fraction_threshold: float = 0.3,
         model_drift_threshold: float = 5.0,
         baseline_window: int = 3,
         persistent_dps_threshold: float = 0.45,
         persistent_trust_threshold: float = 0.85,
         persistent_rounds: int = 2,
+        dps_mad_multiplier: float = 3.0,
     ):
         """
         Args:
             accuracy_drop_threshold: Trigger if accuracy drops by this fraction from baseline
             loss_spike_threshold: Trigger if loss increases by this fraction from baseline
-            dps_threshold: Max DPS value before flagging as suspicious
+            dps_threshold: Absolute DPS floor for an anomaly alert
             suspicious_fraction_threshold: Trigger if this fraction of clients are suspicious
             model_drift_threshold: L2 distance from last trusted model threshold
             baseline_window: Number of rounds to use for rolling baseline
-            persistent_dps_threshold: DPS threshold for persistent malicious client detection
+            persistent_dps_threshold: Retained for compatibility with older configs
             persistent_trust_threshold: Maximum trust score to confirm persistent malicious client
             persistent_rounds: Consecutive rounds required for persistent malicious detection
         """
@@ -45,6 +46,7 @@ class HealthMonitor:
         self.persistent_dps_threshold = persistent_dps_threshold
         self.persistent_trust_threshold = persistent_trust_threshold
         self.persistent_rounds = persistent_rounds
+        self.dps_mad_multiplier = dps_mad_multiplier
 
         # History tracking
         self.accuracy_history: List[float] = []
@@ -70,6 +72,40 @@ class HealthMonitor:
         self.loss_history.append(loss)
         if dps_dict:
             self.dps_history.append(dps_dict)
+
+    def get_dps_outlier_cutoff(self, dps_dict: Optional[Dict[int, float]]) -> Optional[float]:
+        """Return the robust peer-relative alert cutoff for one round."""
+        if not dps_dict or len(dps_dict) < 3:
+            return None
+        scores = np.asarray(
+            [float(score) for score in dps_dict.values() if np.isfinite(score)],
+            dtype=float,
+        )
+        if len(scores) < 3:
+            return None
+        median = float(np.median(scores))
+        mad = float(np.median(np.abs(scores - median)))
+        robust_cutoff = median + self.dps_mad_multiplier * max(mad, 0.02)
+        return max(self.dps_threshold, robust_cutoff)
+
+    def get_dps_outliers(self, dps_dict: Optional[Dict[int, float]]) -> List[int]:
+        """Flag unusually high DPS relative to peers, subject to an absolute floor.
+
+        The absolute threshold alone generated clean-client false positives on this
+        small federation. Requiring a robust peer-relative deviation helps avoid
+        flagging every client when all updates are similarly unusual.
+        """
+        if not dps_dict:
+            return []
+        client_scores = {
+            int(cid): float(score)
+            for cid, score in dps_dict.items()
+            if np.isfinite(score)
+        }
+        cutoff = self.get_dps_outlier_cutoff(dps_dict)
+        if cutoff is None:
+            return []
+        return [cid for cid, score in client_scores.items() if score > cutoff]
 
     def get_baseline_accuracy(self) -> Optional[float]:
         """Compute rolling baseline accuracy."""
@@ -111,7 +147,7 @@ class HealthMonitor:
         """
         Identify clients exhibiting persistent suspicious behavior across consecutive rounds.
         A client is flagged if:
-          1. Their DPS exceeds persistent_dps_threshold for at least persistent_rounds consecutive rounds.
+          1. They are a robust relative DPS outlier for persistent_rounds consecutive rounds.
           2. Their reputation/trust score is <= persistent_trust_threshold (dual-gate requirement).
              Default trust is 1.0 (clean) if not provided in reputation dict.
 
@@ -129,9 +165,10 @@ class HealthMonitor:
         suspicious_clients: List[int] = []
 
         for cid in current_dps.keys():
-            # Check consecutive rounds of elevated DPS
+            # Require the same client to be a robust relative outlier for
+            # consecutive rounds, rather than merely exceeding a global cutoff.
             is_consecutively_high = all(
-                cid in round_dps and round_dps[cid] > self.persistent_dps_threshold
+                cid in self.get_dps_outliers(round_dps)
                 for round_dps in recent_dps_rounds
             )
             if not is_consecutively_high:
@@ -195,42 +232,14 @@ class HealthMonitor:
                 )
                 return True
 
-        # Check 3: DPS analysis
+        # Check 3: a persistent relative DPS outlier can trigger recovery. A
+        # single-round outlier is only an alert, not enough to label a client.
         if dps_dict and len(dps_dict) > 0:  # Check dict is not empty
-            avg_dps = np.mean(list(dps_dict.values()))
-            max_dps = np.max(list(dps_dict.values()))
-            num_suspicious = sum(1 for dps in dps_dict.values() if dps > self.dps_threshold)
-            fraction_suspicious = num_suspicious / len(dps_dict) if len(dps_dict) > 0 else 0.0
-
-            # Check if max DPS exceeds critical threshold
-            # NOTE: DPS is normalized [0,1], so threshold of 0.55 means 55% malicious confidence
-            # IMPROVED: More sensitive thresholds for label-flip detection
-            if max_dps > 0.55:  # IMPROVED: Lower threshold from 0.6 to 0.55
-                print(
-                    f"  [HealthMonitor] Max DPS {max_dps:.3f} exceeds critical threshold (0.55)"
-                )
-                return True
-            
-            # Also check if any client exceeds the configured threshold even slightly
-            if max_dps > self.dps_threshold * 1.05:  # 5% above threshold (was 10%)
-                print(
-                    f"  [HealthMonitor] Max DPS {max_dps:.3f} exceeds threshold {self.dps_threshold} by 5%+"
-                )
-                return True
-
-            if fraction_suspicious > self.suspicious_fraction_threshold:
-                print(
-                    f"  [HealthMonitor] Suspicious client fraction {fraction_suspicious:.2f} "
-                    f"exceeds threshold {self.suspicious_fraction_threshold}"
-                )
-                return True
-
-            # Check 3b: Persistent suspicious clients (Option C)
             persistent_suspicious = self.get_persistent_suspicious_clients(reputation)
             if persistent_suspicious:
                 print(
                     f"  [HealthMonitor] Persistent suspicious clients detected: {persistent_suspicious} "
-                    f"(DPS > {self.persistent_dps_threshold} for {self.persistent_rounds}+ consecutive rounds, "
+                    f"(relative DPS outlier for {self.persistent_rounds}+ consecutive rounds, "
                     f"trust <= {self.persistent_trust_threshold})"
                 )
                 return True
@@ -280,13 +289,8 @@ class HealthMonitor:
         if accuracy < 0.5:  # Below random
             return False
 
-        # Check DPS
+        # Persistent relative outliers indicate unhealthy client behavior.
         if dps_dict:
-            avg_dps = np.mean(list(dps_dict.values()))
-            if avg_dps > self.dps_threshold:
-                return False
-
-            # Persistent suspicious clients also indicate unhealthy state
             if self.get_persistent_suspicious_clients(reputation):
                 return False
 

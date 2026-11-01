@@ -7,6 +7,7 @@ Saves reproducible results to results/defense_comparison/
 import os
 import sys
 import time
+import yaml
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
@@ -21,18 +22,28 @@ def main():
     print("=" * 80)
 
     start_time = time.time()
+    project_root = os.path.dirname(os.path.abspath(__file__))
+    with open(os.path.join(project_root, "configs", "sim_config.yaml"), encoding="utf-8") as stream:
+        project_config = yaml.safe_load(stream)
+    attack_config = project_config["attack"]
     config = ExperimentConfig(
-        num_clients=5,
-        num_rounds=3,
-        local_epochs=3,
-        batch_size=16,
-        learning_rate=0.01,
-        random_seed=42,
-        scale_factor=50.0,
+        num_clients=project_config["num_clients_total"],
+        num_rounds=project_config["num_rounds"],
+        local_epochs=project_config["local_epochs"],
+        batch_size=project_config["batch_size"],
+        learning_rate=project_config["learning_rate"],
+        optimizer_type=project_config["optimizer_type"],
+        random_seed=project_config["random_seed"],
+        dataset_path=os.path.join(project_root, project_config["dataset_path"]),
+        test_split=project_config["test_split"],
+        iid=project_config["iid"],
+        hidden_dim=project_config["hidden_dim"],
+        scale_factor=attack_config["scale_factor"],
+        malicious_client_ids=list(attack_config["malicious_client_ids"]),
     )
 
     runner = ComparisonRunner(config)
-    output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "results", "defense_comparison")
+    output_dir = os.path.join(project_root, "results", "defense_comparison")
 
     print(f"\nResults will be saved to: {output_dir}\n")
 

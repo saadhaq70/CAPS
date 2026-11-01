@@ -50,7 +50,7 @@ def main():
         batch_size=16,
         learning_rate=0.01,
         random_seed=42,
-        dataset_id=45,
+        dataset_path=os.path.join(base_dir, "data", "processed.cleveland.data"),
         scale_factor=50.0,
     )
 
@@ -73,7 +73,7 @@ def main():
         batch_size=16,
         learning_rate=0.01,
         random_seed=42,
-        dataset_id=45,
+        dataset_path=os.path.join(base_dir, "data", "processed.cleveland.data"),
         scale_factor=50.0,
     )
     runner_5r = ComparisonRunner(config_5r)

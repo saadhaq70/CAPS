@@ -11,6 +11,8 @@ FIXES:
 
 import numpy as np
 import torch
+import yaml
+from pathlib import Path
 from typing import Dict, List, Callable, Optional, Tuple
 from collections import defaultdict
 
@@ -32,10 +34,14 @@ class DashboardSimulator:
         Args:
             config: Dictionary with simulation parameters
         """
-        self.config = config
-        self.num_clients = config['num_clients']
-        self.num_rounds = config['num_rounds']
-        self.random_seed = config['random_seed']
+        self.project_root = Path(__file__).resolve().parents[1]
+        with (self.project_root / "configs" / "sim_config.yaml").open(encoding="utf-8") as stream:
+            defaults = yaml.safe_load(stream)
+        self.config = {**defaults, **config}
+        self.num_clients = self.config['num_clients']
+        self.num_rounds = self.config['num_rounds']
+        self.num_clients_per_round = self.config.get('num_clients_per_round', self.num_clients)
+        self.random_seed = self.config['random_seed']
         
         # Set seeds
         np.random.seed(self.random_seed)
@@ -45,37 +51,42 @@ class DashboardSimulator:
         self._setup_data()
         
         # Initialize model
-        self.model = HeartDiseaseNet(input_dim=self.input_dim, hidden_dim=32, output_dim=1)
+        self.model = HeartDiseaseNet(
+            input_dim=self.input_dim,
+            hidden_dim=self.config['hidden_dim'],
+            output_dim=self.config['output_dim'],
+        )
         self.global_params = get_model_parameters(self.model)
         
         # Initialize results storage BEFORE setting up attacks
         self.results = {
             'rounds': [],
             'ground_truth': {},  # Will be filled by _setup_attacks
-            'config': config,
+            'config': self.config,
             'events': [],
             'recovery_attempts': 0,
             'checkpoint_count': 0
+        }
+        self.results['data'] = {
+            'source_file': str(self.project_root / self.config['dataset_path']),
+            'total_clients': self.num_clients,
+            'train_samples': sum(len(x) for x, _ in self.client_datasets),
+            'heldout_samples': len(self.test_data[0]),
+            'validation_samples': int(len(self.test_data[0]) * 0.5),
+            'test_samples': len(self.test_data[0]) - int(len(self.test_data[0]) * 0.5),
+            'input_features': self.input_dim,
         }
         
         # Initialize attack configuration
         self._setup_attacks()
         
         # Initialize self-healing if enabled
-        if config['enable_self_healing']:
+        if self.config['self_healing']['enabled'] or self.config.get('enable_self_healing', False):
             sh_config = {
+                **self.config['self_healing'],
                 'enabled': True,
-                'dps_threshold': config.get('dps_threshold', 0.6),  # Use config value (normalized [0,1])
-                'recovery_rounds': config['recovery_rounds'],
-                'quarantine_window': 5,
-                'suspicious_weight': 0.1,
-                'max_recovery_attempts': 3,
-                'accuracy_drop_threshold': 0.10,  # FIXED: More sensitive (was 0.15)
-                'loss_spike_threshold': 0.25,     # FIXED: More sensitive (was 0.3)
-                'suspicious_fraction_threshold': 0.2,  # FIXED: More sensitive (was 0.3) - triggers with 1/5 clients
-                'model_drift_threshold': 3.0,     # FIXED: More sensitive (was 5.0)
-                'baseline_window': 3,
-                'max_checkpoints': 3
+                'dps_threshold': self.config.get('dps_threshold', self.config['self_healing']['dps_threshold']),
+                'recovery_rounds': self.config.get('recovery_rounds', self.config['self_healing']['recovery_rounds']),
             }
             self.sh_controller = SelfHealingController(sh_config)
         else:
@@ -97,14 +108,14 @@ class DashboardSimulator:
     def _setup_data(self):
         """Load and partition dataset."""
         data_loader = HeartDiseaseDataLoader(
-            dataset_id=45,
+            dataset_path=self.project_root / self.config['dataset_path'],
             random_seed=self.random_seed,
-            test_split=0.2
+            test_split=self.config['test_split']
         )
         
         federated_data = data_loader.get_federated_data(
             num_clients=self.num_clients,
-            iid=True
+            iid=self.config['iid']
         )
         
         self.client_datasets = federated_data['client_data']
@@ -130,29 +141,29 @@ class DashboardSimulator:
                     attack_type=primary_attack,
                     num_malicious_clients=len(malicious_ids),
                     malicious_client_ids=malicious_ids,
-                    source_label=0,
-                    target_label=1,
-                    scale_factor=self.config.get('scale_factor', 50.0),
-                    trigger_feature_indices=[0, 1],
-                    trigger_value=1.0,
-                    poison_fraction=0.3,
-                    backdoor_target_label=1
+                    source_label=self.config['attack']['source_label'],
+                    target_label=self.config['attack']['target_label'],
+                    scale_factor=self.config.get('scale_factor', self.config['attack']['scale_factor']),
+                    trigger_feature_indices=self.config['attack']['trigger_feature_indices'],
+                    trigger_value=self.config['attack']['trigger_value'],
+                    poison_fraction=self.config['attack']['poison_fraction'],
+                    backdoor_target_label=self.config['attack']['backdoor_target_label']
                 )
             else:
                 # Legacy single-attack configuration
                 self.per_client_attacks = None
                 attack_config = AttackConfig(
                     enabled=True,
-                    attack_type=self.config.get('attack_type', 'scaling'),
-                    num_malicious_clients=self.config.get('num_malicious', 2),
-                    malicious_client_ids=[],
-                    source_label=0,
-                    target_label=1,
-                    scale_factor=self.config.get('scale_factor', 50.0),
-                    trigger_feature_indices=[0, 1],
-                    trigger_value=1.0,
-                    poison_fraction=0.3,
-                    backdoor_target_label=1
+                    attack_type=self.config.get('attack_type', self.config['attack']['attack_type']),
+                    num_malicious_clients=self.config['attack']['num_malicious_clients'],
+                    malicious_client_ids=self.config['attack']['malicious_client_ids'],
+                    source_label=self.config['attack']['source_label'],
+                    target_label=self.config['attack']['target_label'],
+                    scale_factor=self.config.get('scale_factor', self.config['attack']['scale_factor']),
+                    trigger_feature_indices=self.config['attack']['trigger_feature_indices'],
+                    trigger_value=self.config['attack']['trigger_value'],
+                    poison_fraction=self.config['attack']['poison_fraction'],
+                    backdoor_target_label=self.config['attack']['backdoor_target_label']
                 )
         else:
             self.per_client_attacks = None
@@ -161,8 +172,15 @@ class DashboardSimulator:
         # Get client factory
         self.client_fn, self.ground_truth = get_client_fn_with_attacks(
             client_data=self.client_datasets,
-            config={'input_dim': self.input_dim, 'hidden_dim': 32, 'output_dim': 1,
-                   'learning_rate': 0.01, 'batch_size': 16, 'local_epochs': 3},
+            config={
+                'input_dim': self.input_dim,
+                'hidden_dim': self.config['hidden_dim'],
+                'output_dim': self.config['output_dim'],
+                'learning_rate': self.config['learning_rate'],
+                'batch_size': self.config['batch_size'],
+                'local_epochs': self.config['local_epochs'],
+                'optimizer_type': self.config['optimizer_type'],
+            },
             attack_config=attack_config,
             per_client_attacks=self.per_client_attacks  # Pass per-client config
         )
@@ -185,7 +203,7 @@ class DashboardSimulator:
             Complete results up to this round
         """
         # Select clients
-        num_selected = min(3, self.num_clients)
+        num_selected = min(self.num_clients_per_round, self.num_clients)
         selected_clients = np.random.choice(self.num_clients, num_selected, replace=False)
         
         # Collect client updates
@@ -209,7 +227,9 @@ class DashboardSimulator:
         # Debug: Print max DPS and all scores
         if len(dps_scores) > 0:
             max_dps = max(dps_scores.values())
-            threshold = self.config.get('dps_threshold', 0.6)
+            threshold = self.config.get(
+                'dps_threshold', self.config['self_healing']['dps_threshold']
+            )
             print(f"  [Round {round_num}] DPS Scores: {[(cid, f'{dps:.3f}') for cid, dps in sorted(dps_scores.items()) if dps > 0]}")
             print(f"  [Round {round_num}] Max DPS: {max_dps:.3f} | Threshold: {threshold}")
             if max_dps > threshold:

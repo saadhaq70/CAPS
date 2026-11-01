@@ -56,6 +56,7 @@ class MaliciousClient(HeartDiseaseClient):
         learning_rate: float,
         local_epochs: int,
         attack: BaseAttack,
+        optimizer_type: str = "adam",
     ) -> None:
         """
         Initialize malicious client.
@@ -89,6 +90,7 @@ class MaliciousClient(HeartDiseaseClient):
             batch_size=batch_size,
             learning_rate=learning_rate,
             local_epochs=local_epochs,
+            optimizer_type=optimizer_type,
         )
         print(
             f"  ⚠  Client {cid} initialised as MALICIOUS "
@@ -150,6 +152,7 @@ class MaliciousClient(HeartDiseaseClient):
             self.local_epochs,
             self.learning_rate,
             self.device,
+            self.optimizer_type,
         )
 
         # Step 5 — apply update manipulation (sign-flip / scaling)

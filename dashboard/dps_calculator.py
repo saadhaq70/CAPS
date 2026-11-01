@@ -78,8 +78,16 @@ class DPSCalculator:
         
         dps_scores = {}
         
-        # Flatten updates for distance calculations
-        flat_updates = [self._flatten_params(params) for params in client_updates]
+        # Compare model deltas, not full weight vectors. Shared global weights
+        # otherwise dominate cosine and history scores and hide local behavior.
+        if global_params is not None:
+            delta_updates = [
+                [client_layer - global_layer for client_layer, global_layer in zip(params, global_params)]
+                for params in client_updates
+            ]
+        else:
+            delta_updates = client_updates
+        flat_updates = [self._flatten_params(params) for params in delta_updates]
         
         # Compute median update (robust to outliers)
         median_update = np.median(flat_updates, axis=0)
@@ -107,9 +115,7 @@ class DPSCalculator:
             P_raw = self._compute_P_real(client_updates[idx], cid)
             P = self._normalize_score(P_raw, score_type='P')
             
-            # D: Data Quality Score (HONEST - disabled, set to 0)
-            # REASON: Requires access to local data distribution which violates FL privacy
-            # Cannot be computed without raw data access
+            # D: Data Quality Score (disabled by design; raw client data stays local)
             D = 0.0
             
             # Combine scores (weighted average)
@@ -339,17 +345,18 @@ class DPSCalculator:
             
             criterion = nn.BCELoss()
             total_loss = 0.0
-            num_batches = 0
+            total_samples = 0
             
             with torch.no_grad():
                 for X_batch, y_batch in val_loader:
                     X_batch, y_batch = X_batch.to(device), y_batch.to(device)
                     outputs = model(X_batch)
                     loss = criterion(outputs, y_batch.unsqueeze(1))
-                    total_loss += loss.item()
-                    num_batches += 1
-            
-            return total_loss / num_batches if num_batches > 0 else 0.0
+                    batch_size = X_batch.size(0)
+                    total_loss += loss.item() * batch_size
+                    total_samples += batch_size
+
+            return total_loss / total_samples if total_samples else 0.0
             
         except Exception:
             return 0.0

@@ -15,7 +15,7 @@ config = ExperimentConfig(
     batch_size=16,
     learning_rate=0.01,
     random_seed=42,
-    dataset_id=45,
+    dataset_path=os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "processed.cleveland.data"),
     scale_factor=50.0,
 )
 

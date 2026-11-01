@@ -70,6 +70,7 @@ class SelfHealingController:
                 "persistent_dps_threshold",
                 "persistent_trust_threshold",
                 "persistent_rounds",
+                "dps_mad_multiplier",
             ]:
                 if k in config:
                     hm_kwargs[k] = config[k]
@@ -173,6 +174,13 @@ class SelfHealingController:
         if should_recover:
             print(f"\n[SelfHealing] Round {round_num}: DEGRADATION DETECTED")
             print(f"  Transitioning NORMAL → MONITOR")
+            # Apply the client mitigation immediately after a confirmed
+            # persistent anomaly; waiting until model recovery can leave the
+            # final detected round unmitigated and delay action by two rounds.
+            if dps_dict:
+                self._identify_suspicious_clients(
+                    round_num, dps_dict, reputation=reputation
+                )
             self.state = HealingState.MONITOR
             self.state_entry_round = round_num
             self.candidate_params = params
@@ -312,15 +320,10 @@ class SelfHealingController:
         reputation: Optional[Dict[int, float]] = None,
     ) -> None:
         """Identify and quarantine suspicious clients."""
-        # 1. Acute threshold check: sort clients by DPS (highest first)
-        sorted_clients = sorted(dps_dict.items(), key=lambda x: x[1], reverse=True)
-        threshold = self.health_monitor.dps_threshold
-        for client_id, dps in sorted_clients:
-            if dps > threshold:
-                self.quarantined_clients.add(client_id)
-                self.quarantine_expiry[client_id] = (
-                    round_num + self.quarantine_window
-                )
+        # 1. Relative current-round outliers
+        for client_id in self.health_monitor.get_dps_outliers(dps_dict):
+            self.quarantined_clients.add(client_id)
+            self.quarantine_expiry[client_id] = round_num + self.quarantine_window
 
         # 2. Persistent suspicious clients check (Option C)
         persistent_clients = self.health_monitor.get_persistent_suspicious_clients(reputation)
@@ -335,10 +338,10 @@ class SelfHealingController:
         if not dps_dict:
             return
 
-        # Lower threshold to quarantine more clients
-        threshold = self.health_monitor.dps_threshold * 0.7
-        for client_id, dps in dps_dict.items():
-            if dps > threshold and client_id not in self.quarantined_clients:
+        # Use a more permissive relative cutoff for recovery retries.
+        candidate_clients = self.health_monitor.get_dps_outliers(dps_dict)
+        for client_id in candidate_clients:
+            if client_id not in self.quarantined_clients:
                 self.quarantined_clients.add(client_id)
                 print(f"  Expanded quarantine: added client {client_id}")
 

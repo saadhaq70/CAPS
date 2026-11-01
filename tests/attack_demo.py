@@ -62,7 +62,7 @@ print("ASH-FL Phase 2: Attack Demo")
 print(SEPARATOR)
 print("\nLoading UCI Heart Disease dataset (shared across all runs)...")
 
-loader = HeartDiseaseDataLoader(dataset_id=45, random_seed=42, test_split=0.2)
+loader = HeartDiseaseDataLoader(random_seed=42, test_split=0.2)
 federated_data = loader.get_federated_data(num_clients=NUM_CLIENTS, iid=True)
 client_data = federated_data["client_data"]
 test_data   = federated_data["test_data"]

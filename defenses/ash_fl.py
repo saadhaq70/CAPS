@@ -32,7 +32,7 @@ class ASHFLDefense(BaseDefense):
     """
     Proposed Capstone Defense: Adaptive Self-Healing Federated Learning (ASH-FL).
     Acts as the primary, default, fully functional defense pipeline.
-    
+
     Optional baseline additions (Multi-Krum, Trimmed Mean, FLTrust) can be independently
     enabled on top of the ASH-FL pipeline to provide layered defense-in-depth,
     while quarantine, health monitoring, checkpoints, and FSM recovery remain authoritative.
@@ -43,7 +43,7 @@ class ASHFLDefense(BaseDefense):
         num_clients: int,
         validation_data: Tuple[np.ndarray, np.ndarray],
         input_dim: int = 13,
-        hidden_dim: int = 32,
+        hidden_dim: int = 16,
         output_dim: int = 1,
         dps_threshold: float = 0.55,
         recovery_rounds: int = 3,
@@ -57,7 +57,7 @@ class ASHFLDefense(BaseDefense):
     ):
         """
         Initialize ASH-FL defense.
-        
+
         Args:
             num_clients: Total participating clients
             validation_data: Clean server root dataset (X, y)
@@ -76,9 +76,12 @@ class ASHFLDefense(BaseDefense):
         """
         # Determine descriptive defense label
         active_additions = []
-        if enable_multi_krum: active_additions.append("Multi-Krum")
-        if enable_trimmed_mean: active_additions.append("Trimmed Mean")
-        if enable_fltrust: active_additions.append("FLTrust")
+        if enable_multi_krum:
+            active_additions.append("Multi-Krum")
+        if enable_trimmed_mean:
+            active_additions.append("Trimmed Mean")
+        if enable_fltrust:
+            active_additions.append("FLTrust")
 
         if active_additions:
             disp_name = f"ASH-FL + {' + '.join(active_additions)}"
@@ -99,7 +102,8 @@ class ASHFLDefense(BaseDefense):
         self.enable_trimmed_mean = enable_trimmed_mean
         self.enable_fltrust = enable_fltrust
 
-        self.device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        self.device = torch.device(
+            "cuda" if torch.cuda.is_available() else "cpu")
         self.model = HeartDiseaseNet(
             input_dim=input_dim,
             hidden_dim=hidden_dim,
@@ -141,7 +145,8 @@ class ASHFLDefense(BaseDefense):
         self.sh_controller = SelfHealingController(self.sh_config)
 
         # State tracking
-        self.trust_scores: Dict[int, float] = {cid: 1.0 for cid in range(num_clients)}
+        self.trust_scores: Dict[int, float] = {
+            cid: 1.0 for cid in range(num_clients)}
         self.last_dps_scores: Dict[int, float] = {}
         self.last_aggregation_weights: Dict[int, float] = {}
         self.recovery_attempts: int = 0
@@ -231,9 +236,11 @@ class ASHFLDefense(BaseDefense):
                 norm_d = float(np.linalg.norm(flat_d))
 
                 if norm_d > 1e-9 and norm_g0 > 1e-9:
-                    cos_sim = float(np.dot(flat_d, flat_g0) / (norm_d * norm_g0))
+                    cos_sim = float(np.dot(flat_d, flat_g0) /
+                                    (norm_d * norm_g0))
                     scale_ratio = norm_g0 / norm_d
-                    normed_p = [g + scale_ratio * d for g, d in zip(global_params, delta)]
+                    normed_p = [g + scale_ratio * d for g,
+                                d in zip(global_params, delta)]
                 else:
                     cos_sim = 0.0
                     normed_p = p
@@ -265,8 +272,10 @@ class ASHFLDefense(BaseDefense):
             m_select = max(1, n - 1)
             sorted_order = sorted(range(n), key=lambda idx: scores[idx])
             selected_indices = set(sorted_order[:m_select])
-            self.last_krum_selected = [client_ids[idx] for idx in selected_indices]
-            krum_excluded = [client_ids[idx] for idx in range(n) if idx not in selected_indices]
+            self.last_krum_selected = [client_ids[idx]
+                                       for idx in selected_indices]
+            krum_excluded = [client_ids[idx]
+                             for idx in range(n) if idx not in selected_indices]
 
         # ── CORE ASH-FL STEP 1: Compute Multi-Signal DPS Scores ──
         dps_scores = self.dps_calculator.compute_dps_scores(
@@ -324,7 +333,8 @@ class ASHFLDefense(BaseDefense):
         if fsm_recovery_count > self.recovery_attempts:
             self.recovery_attempts = fsm_recovery_count
 
-        self.checkpoint_count = len(self.sh_controller.checkpoint_manager.checkpoints)
+        self.checkpoint_count = len(
+            self.sh_controller.checkpoint_manager.checkpoints)
 
         # ── CORE ASH-FL STEP 5: Compute Adaptive Aggregation Weights ──
         gamma = 2.0  # Trust sensitivity
@@ -334,7 +344,8 @@ class ASHFLDefense(BaseDefense):
         for cid, _, num_samples in client_updates:
             trust = self.trust_scores.get(cid, 1.0)
             dps = dps_scores.get(cid, 0.0)
-            base_w = num_samples * (trust ** gamma) * ((1.0 - min(dps / 10.0, 0.99)) ** eta)
+            base_w = num_samples * (trust ** gamma) * \
+                ((1.0 - min(dps / 10.0, 0.99)) ** eta)
 
             # Apply quarantine multiplier
             if self.sh_controller.is_client_quarantined(cid):
@@ -362,7 +373,7 @@ class ASHFLDefense(BaseDefense):
             for l in range(num_layers):
                 layer_stack = np.stack([p[l] for p in update_params], axis=0)
                 sorted_stack = np.sort(layer_stack, axis=0)
-                trimmed_stack = sorted_stack[k : n - k]
+                trimmed_stack = sorted_stack[k: n - k]
                 aggregated_params.append(np.mean(trimmed_stack, axis=0))
         else:
             # Original Default ASH-FL weighted average

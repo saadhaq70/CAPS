@@ -25,13 +25,13 @@ Unlike simple distance metrics, DPS combines **multiple independent signals** to
 
 ### Why Multiple Signals?
 
-Different attacks have different signatures:
+Different attacks can produce different signals, though detection is not guaranteed:
 - **Label-flip attacks** → High P (bad performance) + moderate loss spike
 - **Sign-flip attacks** → High C (wrong direction)
 - **Scaling attacks** → High G (large magnitude)
 - **Backdoor attacks** → High H (inconsistent behavior) + High P
 
-By combining signals, DPS catches them all!
+These signals can help distinguish attack behavior, but no signal or threshold guarantees detection.
 
 ### Formula (Updated)
 
@@ -47,13 +47,13 @@ $$DPS_i = w_G \\cdot G_i + w_C \\cdot C_i + w_H \\cdot H_i + w_P \\cdot P_i + w_
 ### Normalization
 
 All signals normalized to [0, 1] using adaptive functions before weighting:
-- **G**: Sigmoid centered at 2.0 (suspicious if > 2σ from median)
-- **C**: Linear clipping to [0, 1] (suspicious if cosine similarity < 0)
-- **H**: Tanh for smooth saturation (suspicious if > 2σ from history)
-- **P**: Sigmoid centered at 0.5 (suspicious if accuracy drops > 5% or loss spikes)
+- **G**: Sigmoid of the median MAD-normalized delta deviation, centered at 2.0
+- **C**: `clip(1 - cosine_similarity, 0, 1)`
+- **H**: `tanh(raw_history_deviation / 2)`
+- **P**: Sigmoid of the shadow-validation impact score, centered at 0.5
 - **D**: Always 0.0 (disabled)
 
-**Typical threshold**: DPS > 0.6-0.7 flags client as suspicious (normalized scale)
+The configured threshold defaults to **0.55** and can be changed in the simulator. A score above the threshold contributes to suspicious-client and recovery decisions; it does not prove a client is malicious.
 """
     
     explanations["📊 G - Gradient Deviation"] = """
@@ -61,19 +61,18 @@ All signals normalized to [0, 1] using adaptive functions before weighting:
 
 ### Calculation
 
-1. Compute **median update** across all clients (robust to outliers)
-2. Compute **MAD** (Median Absolute Deviation) as a robust scale estimate
-3. For each client: $G_i = \\frac{|\\Delta_i - \\text{median}|}{\\text{MAD}}$
+1. Compute each client's local model delta from the current global model
+2. Compute the **median delta** across participating clients (robust to outliers)
+3. Compute **MAD** (Median Absolute Deviation) as a robust scale estimate
+4. Divide each client's coordinate deviation from the median by MAD and take the median deviation
 
 ### Interpretation
 
-- **G < 2**: Normal variation
-- **G > 2**: Potential outlier (3σ rule analog)
-- **G > 5**: Very suspicious
+The dashboard displays G after sigmoid normalization to [0, 1]. The raw score is a median coordinate deviation divided by MAD; it is not a probability.
 
 ### Why Median + MAD?
 
-Unlike mean and standard deviation, median and MAD are **robust to outliers**. Even if 40% of clients are malicious, the median still represents honest behavior.
+Unlike mean and standard deviation, median and MAD are less sensitive to outliers. They do not guarantee a correct consensus if most participating clients are malicious.
 
 ### What Attacks Trigger High G?
 
@@ -137,7 +136,7 @@ Some attacks are **adaptive**: malicious clients behave normally early to build 
 
 $$EMA_{t} = \\alpha \\cdot \\Delta_t + (1-\\alpha) \\cdot EMA_{t-1}$$
 
-Default: $\\alpha = 0.3$ (balances responsiveness vs stability)
+The resulting raw score is capped and mapped through a sigmoid centered at 2.0.
 """
     
     explanations["🎯 P - Performance Impact"] = """
@@ -151,43 +150,39 @@ Default: $\\alpha = 0.3$ (balances responsiveness vs stability)
 3. Apply the client's update to shadow model
 4. Measure new accuracy and loss on same validation set
 5. Compute **both** degradation signals:
-   - Accuracy degradation: `acc_score = (baseline_acc - updated_acc) / 0.08`
-   - Loss spike: `loss_score = (updated_loss - baseline_loss) / baseline_loss / 0.5`
+   - Accuracy degradation: `acc_score = max(0, (baseline_acc - updated_acc) / 0.05)`
+   - Relative loss increase: `loss_score = max(0, ((updated_loss - baseline_loss) / baseline_loss) / 0.3)`
 6. Take the **maximum** of both: `P = max(acc_score, loss_score)`
+7. Map P through a sigmoid centered at 0.5 to get the displayed normalized P signal.
 
 ### Why Both Accuracy and Loss?
 
 **Label-flip attacks** often show:
-- Moderate accuracy drop (5-8%)
-- Large loss spike (30-50% increase)
+- A decrease in validation accuracy
+- An increase in validation loss
 
 By checking both, we catch label-flip more reliably even when accuracy degradation is subtle.
 
 ### Interpretation
 
-- **P = 0**: No degradation (helpful update)
-- **P = 0.5**: Moderate degradation (suspicious)
-- **P = 1.0**: 8% accuracy drop OR 50% loss increase (very harmful)
-- **P > 1.0**: Severe degradation (strong attack signal)
+- **P raw = 0**: No measured degradation
+- **P raw = 1.0**: 5% accuracy drop OR 30% relative loss increase
+- Displayed P is sigmoid-normalized raw P, not a probability.
 
 ### Sensitivity
 
-More sensitive than before (0.08 vs 0.10 accuracy threshold):
-- Catches subtle poisoning earlier
-- May increase false positives slightly (acceptable trade-off)
-- Loss check provides secondary validation
+The implementation uses 0.05 as the accuracy-drop scale and 0.3 as the relative-loss scale. These are design thresholds, not guarantees of detection.
 
 ### Why Performance?
 
-This is the **ultimate ground truth**: if an update hurts accuracy or spikes loss, it's poisoned by definition.
+This signal measures the impact of an update on the held-out validation data; poor impact does not by itself establish that an update is malicious.
 
 ### Computational Cost
 
-**Most expensive signal** - requires model evaluation.
+This signal requires extra model evaluation.
 - Only computed for participating clients each round
-- Uses held-out validation set (50% of test data)
+- Uses the configured validation subset of held-out data
 - Separate from final evaluation set
-- ~10-20ms per client (acceptable overhead)
 
 ### Validation Set
 
@@ -195,7 +190,7 @@ Critical requirements:
 - **Clean** - no poisoned samples
 - **Representative** - matches global distribution
 - **Held-out** - never used for training
-- **Small** - 30-50 samples sufficient for binary classification
+- Size depends on the dataset and the desired uncertainty; no fixed count is assumed sufficient.
 
 ### What Attacks Trigger High P?
 
@@ -212,7 +207,7 @@ If validation data unavailable:
 - Clearly marked in logs
 - Less accurate but prevents crashes
 
-**Bottom line**: P is now REAL shadow validation with dual accuracy+loss checks for better label-flip detection.
+P is computed by evaluating a copied model on held-out validation records; it does not identify an attack with certainty.
 """
     
     explanations["📦 D - Data Quality"] = """
@@ -221,7 +216,7 @@ If validation data unavailable:
 ### ⚠️ CURRENT STATUS: DISABLED (D = 0.0 for all clients)
 
 **Why is D disabled?**  
-Computing real data quality requires analyzing the client's local dataset distribution (class balance, feature variance, label noise, etc.). This **violates Federated Learning privacy principles** - the core tenet of FL is that the server should never access raw client data.
+This implementation does not compute or report a data-quality score. A deployment could compute such a signal on each client and share an explicitly defined summary. The detector does not inspect individual client training records, and this project does not fabricate a proxy.
 
 **What would D measure (if we could access local data)?**
 - **Class balance**: Is one class over-represented?
@@ -230,43 +225,7 @@ Computing real data quality requires analyzing the client's local dataset distri
 - **Label noise**: Are labels consistent?
 - **Outlier detection**: Are there corrupted samples?
 
-### Weight Redistribution
-
-Since D cannot be computed honestly, its weight has been redistributed to strengthen the other signals:
-
-**Updated weights** (effective now):
-- $w_G = 0.27$ (was 0.28)
-- $w_C = 0.27$ (was 0.25)
-- $w_H = 0.19$ (was 0.20)
-- $w_P = 0.27$ (was 0.15) - **significantly increased for label-flip detection**
-- $w_D = 0.00$ (was 0.10) - **DISABLED**
-
-### Privacy vs. Detection Trade-off
-
-This is a fundamental constraint in Federated Learning:
-- ✅ **Privacy preserved**: Server never sees raw client data
-- ✅ **Honest system**: We don't pretend to compute D
-- ❌ **Reduced detection**: One less signal available
-
-However, the other four signals (G, C, H, P) are sufficient to catch most attacks:
-- **G** catches magnitude-based attacks (scaling)
-- **C** catches direction-based attacks (sign-flip)
-- **H** catches temporal attacks (delayed poisoning)
-- **P** catches performance-degrading attacks (label-flip, backdoor)
-
-### Future Approximations
-
-Could potentially approximate D from **indirect signals** without data access:
-- High update variance → possibly noisy local data
-- Consistent convergence → likely good quality
-- Update stability → stable dataset
-
-But these are weak proxies and may not be worth the complexity.
-
-### Bottom Line
-
-**Honest FL means we can't peek at local data, so D stays at 0.**  
-The P signal (performance impact via shadow validation) now carries more weight to compensate, especially for catching subtle attacks like label-flip.
+**D stays at 0 because it is disabled.** The dashboard reports four computed signals and marks D unavailable by design.
 """
     
     explanations["🤝 Trust & Reputation"] = """
@@ -276,7 +235,7 @@ The P signal (performance impact via shadow validation) now carries more weight 
 
 $$R_i^{(t+1)} = R_i^{(t)} \\cdot (1 - \\alpha \\cdot DPS_i^{(t)})$$
 
-- **Low DPS**: Trust grows (or stays high)
+- **Low DPS**: Trust decays more slowly
 - **High DPS**: Trust decays
 - **Minimum**: $R_i \\geq 0.01$ (always allow small weight)
 
@@ -284,23 +243,24 @@ Default: $\\alpha = 0.1$ (decay rate)
 
 ### Why Trust?
 
-**Aggregation should favor reliable clients.** One bad round shouldn't destroy a client's reputation, but repeated misbehavior should.
+**Aggregation uses a running trust value.** A high DPS reduces that value; the current update rule does not increase trust after a clean round.
 
 ### Aggregation Weight
 
-$$a_i = n_i \\cdot R_i^\\gamma \\cdot (1 - DPS_i)^\\eta$$
+$$a_i = n_i \\cdot R_i^2 \\cdot (1 - \\min(DPS_i/10, 0.99))^{1.5}$$
 
 Where:
 - $n_i$: Number of samples
 - $R_i$: Trust score
-- $\\gamma$: Trust sensitivity (default: 2.0)
-- $\\eta$: DPS penalty (default: 1.5)
+- Trust sensitivity exponent: 2.0
+- DPS penalty exponent: 1.5
+- Quarantine applies an additional configured multiplier.
 
 ### Effect
 
 - **Honest clients**: High trust → high weight
 - **Malicious clients**: Low trust → near-zero weight
-- **Reformed clients**: Trust can recover if they behave
+- **Reformed clients**: This implementation does not restore trust automatically
 """
     
     explanations["🛡️ Self-Healing FSM"] = """

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launch ASH-FL Interactive Dashboard
+# Legacy command; starts the unified live-data dashboard.
 
 echo "=========================================="
 echo "ASH-FL Interactive Dashboard"
@@ -12,4 +12,4 @@ echo "Press Ctrl+C to stop the server"
 echo "=========================================="
 echo ""
 
-streamlit run dashboard_app.py
+streamlit run unified_dashboard.py

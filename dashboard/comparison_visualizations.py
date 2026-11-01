@@ -29,6 +29,66 @@ ACADEMIC_LAYOUT = dict(
 )
 
 
+def create_client_trust_timeline(
+    per_round_metrics: list[Dict[str, Any]],
+    num_clients: int,
+    title: str = "Client Trust Score by Round",
+) -> go.Figure:
+    """Plot recorded ASH-FL trust scores and actual quarantine actions by round."""
+    rounds = list(range(1, len(per_round_metrics) + 1))
+    fig = go.Figure()
+    client_trust = {client_id: [] for client_id in range(num_clients)}
+    quarantine_points = {client_id: ([], []) for client_id in range(num_clients)}
+
+    for round_number, metrics in zip(rounds, per_round_metrics):
+        trust_scores = {
+            int(client_id): float(score)
+            for client_id, score in metrics.get("trust_scores", {}).items()
+            if 0 <= int(client_id) < num_clients
+        }
+        quarantined = {int(cid) for cid in metrics.get("quarantined_clients", [])}
+        for client_id in range(num_clients):
+            trust = trust_scores.get(client_id)
+            client_trust[client_id].append(trust)
+            if trust is not None and client_id in quarantined:
+                quarantine_points[client_id][0].append(round_number)
+                quarantine_points[client_id][1].append(trust)
+
+    palette = ["#c7f36b", "#70c6bc", "#a894f4", "#f2a65a", "#68a9e8", "#ed7892", "#d9cb70", "#8cda92"]
+    for client_id, values in client_trust.items():
+        color = palette[client_id % len(palette)]
+        fig.add_trace(go.Scatter(
+            x=rounds,
+            y=values,
+            mode="lines+markers",
+            name=f"Client {client_id}",
+            connectgaps=False,
+            line=dict(color=color, width=2),
+            marker=dict(size=6, color=color),
+            hovertemplate=f"<b>Client {client_id}</b><br>Round %{{x}}<br>Trust %{{y:.3f}}<extra></extra>",
+        ))
+        quarantine_x, quarantine_y = quarantine_points[client_id]
+        if quarantine_x:
+            fig.add_trace(go.Scatter(
+                x=quarantine_x, y=quarantine_y, mode="markers", name=f"Client {client_id} quarantined",
+                legendgroup=f"client-{client_id}", showlegend=False,
+                marker=dict(symbol="diamond", size=11, color="#ffbd59", line=dict(color="#171a15", width=1)),
+                hovertemplate=f"<b>Client {client_id} · quarantined</b><br>Round %{{x}}<br>Trust %{{y:.3f}}<extra></extra>",
+            ))
+
+    fig.update_layout(
+        title=dict(text=f"<b>{title}</b>", font=dict(size=16, color="#f0f0e9")),
+        xaxis=dict(title="Federated round", dtick=1, gridcolor="rgba(190,200,170,.10)", color="#a9afa0"),
+        yaxis=dict(title="Client trust score", range=[0, 1], gridcolor="rgba(190,200,170,.10)", color="#a9afa0"),
+        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+        font=dict(family="Inter, sans-serif", color="#a9afa0"),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        margin=dict(l=55, r=25, t=75, b=50), height=430,
+        hovermode="x unified",
+    )
+    return fig
+
+
 def create_comparison_accuracy_bar(defense_results: Dict[str, Any]) -> go.Figure:
     """Bar chart comparing final accuracy across defenses."""
     defenses = list(defense_results.keys())
@@ -255,5 +315,59 @@ def create_comparison_backdoor_asr_chart(defense_results: Dict[str, Any]) -> Opt
         ),
         **ACADEMIC_LAYOUT,
         height=360,
+    )
+    return fig
+
+
+def create_attack_defense_accuracy_heatmap(
+    matrix_results: Dict[str, Any],
+) -> go.Figure:
+    """Show final accuracy for every attack-by-defense result in a matrix run."""
+    attack_order = ["label_flip", "sign_flip", "scaling", "backdoor"]
+    attack_labels = {
+        "label_flip": "Label Flip",
+        "sign_flip": "Sign Flip",
+        "scaling": "Scaling",
+        "backdoor": "Backdoor",
+    }
+    defense_order = ["ASH-FL", "Multi-Krum", "Trimmed Mean", "FLTrust"]
+
+    attacks = [attack for attack in attack_order if attack in matrix_results]
+    defenses = [
+        defense for defense in defense_order
+        if any(defense in matrix_results[attack].defense_results for attack in attacks)
+    ]
+    values = [
+        [
+            matrix_results[attack].defense_results[defense].final_accuracy * 100
+            if defense in matrix_results[attack].defense_results else np.nan
+            for defense in defenses
+        ]
+        for attack in attacks
+    ]
+    labels = [
+        [f"{value:.1f}%" if np.isfinite(value) else "" for value in row]
+        for row in values
+    ]
+
+    fig = go.Figure(go.Heatmap(
+        z=values,
+        x=defenses,
+        y=[attack_labels[attack] for attack in attacks],
+        text=labels,
+        texttemplate="%{text}",
+        textfont=dict(color="#f8fafc", size=13),
+        colorscale="Viridis",
+        zmin=0,
+        zmax=100,
+        colorbar=dict(title="Accuracy (%)", tickfont=dict(color="#cbd5e1")),
+        hovertemplate="Attack: %{y}<br>Defense: %{x}<br>Final accuracy: %{z:.1f}%<extra></extra>",
+    ))
+    fig.update_layout(
+        title=dict(text="<b>Final Accuracy: All Attacks × All Defenses</b>", font=dict(size=15, color="#f8fafc")),
+        xaxis=dict(title="Defense strategy", tickfont=dict(color="#cbd5e1")),
+        yaxis=dict(title="Attack scenario", autorange="reversed", tickfont=dict(color="#cbd5e1")),
+        **ACADEMIC_LAYOUT,
+        height=390,
     )
     return fig

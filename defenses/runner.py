@@ -22,7 +22,7 @@ from clients.client import (
     set_model_parameters,
     evaluate_model,
 )
-from clients.data_loader import HeartDiseaseDataLoader
+from clients.data_loader import DEFAULT_DATA_PATH, HeartDiseaseDataLoader
 from attacks.base import AttackConfig
 from attacks.client_factory import get_client_fn_with_attacks
 from .base import BaseDefense
@@ -36,16 +36,16 @@ from .ash_fl import ASHFLDefense
 class ExperimentConfig:
     """Standardized hyperparameter and dataset configuration."""
     num_clients: int = 5
-    num_rounds: int = 3
+    num_rounds: int = 15
     local_epochs: int = 3
     batch_size: int = 16
-    learning_rate: float = 0.01
+    learning_rate: float = 0.003
+    optimizer_type: str = "adam"
     random_seed: int = 42
-    dataset_id: int = 45
+    dataset_path: str = str(DEFAULT_DATA_PATH)
     test_split: float = 0.2
     iid: bool = True
-    input_dim: int = 13
-    hidden_dim: int = 32
+    hidden_dim: int = 16
     output_dim: int = 1
 
     # Attack configuration
@@ -58,6 +58,8 @@ class ExperimentConfig:
     trigger_value: float = 1.0
     poison_fraction: float = 0.3
     backdoor_target_label: int = 1
+    dps_threshold: float = 0.55
+    recovery_rounds: int = 3
 
 
 @dataclass
@@ -183,7 +185,7 @@ class ComparisonRunner:
         torch.manual_seed(self.config.random_seed)
 
         data_loader = HeartDiseaseDataLoader(
-            dataset_id=self.config.dataset_id,
+            dataset_path=self.config.dataset_path,
             random_seed=self.config.random_seed,
             test_split=self.config.test_split,
         )
@@ -192,6 +194,7 @@ class ComparisonRunner:
             iid=self.config.iid,
         )
         self.client_datasets = fed_data["client_data"]
+        self.config.input_dim = fed_data["input_dim"]
         raw_test_data = fed_data["test_data"]
 
         # Split test data into clean server root/val set (50%) and evaluation test set (50%)
@@ -238,7 +241,7 @@ class ComparisonRunner:
         Caches per (defense_name, configuration_signature) to prevent cross-config contamination.
         """
         config_key = (
-            self.config.dataset_id,
+            self.config.dataset_path,
             self.config.test_split,
             self.config.iid,
             self.config.num_clients,
@@ -246,6 +249,7 @@ class ComparisonRunner:
             self.config.local_epochs,
             self.config.batch_size,
             self.config.learning_rate,
+            self.config.optimizer_type,
             self.config.random_seed,
         )
         cache_key = (defense_name or "Standard_FedAvg", config_key)
@@ -282,8 +286,8 @@ class ComparisonRunner:
                 input_dim=self.config.input_dim,
                 hidden_dim=self.config.hidden_dim,
                 output_dim=self.config.output_dim,
-                dps_threshold=0.55,
-                recovery_rounds=3,
+                dps_threshold=self.config.dps_threshold,
+                recovery_rounds=self.config.recovery_rounds,
             ),
         }
 
@@ -324,7 +328,7 @@ class ComparisonRunner:
             "learning_rate": self.config.learning_rate,
             "batch_size": self.config.batch_size,
             "local_epochs": self.config.local_epochs,
-            "optimizer_type": "adam",
+            "optimizer_type": self.config.optimizer_type,
         }
 
         # Client factory for this run
@@ -450,7 +454,7 @@ class ComparisonRunner:
 
         return ComparisonResult(
             attack_type=attack_type,
-            config=asdict(self.config),
+            config={**asdict(self.config), "attack_type": attack_type},
             defense_results=results,
         )
 

@@ -39,10 +39,11 @@ def test_imports():
         errors.append(f"✗ scikit-learn: {e}")
     
     try:
-        import ucimlrepo
-        print(f"✓ ucimlrepo")
+        from clients.data_loader import DEFAULT_DATA_PATH
+        assert DEFAULT_DATA_PATH.is_file(), f"Local dataset not found: {DEFAULT_DATA_PATH}"
+        print(f"✓ Local UCI dataset: {DEFAULT_DATA_PATH}")
     except ImportError as e:
-        errors.append(f"✗ ucimlrepo: {e}")
+        errors.append(f"✗ Local dataset: {e}")
     
     try:
         import numpy

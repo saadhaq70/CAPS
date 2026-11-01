@@ -1,115 +1,24 @@
-# ASH-FL: Adaptive Self-Healing Federated Learning
+# ASH-FL / CAPS
 
-Federated Learning with attacks, detection, and self-healing. **NEW: Unified Cyber HUD Dashboard** with real functionality.
+This repository is a local federated-learning simulation for binary heart-disease classification. It trains simulated clients on the Cleveland subset of the UCI Heart Disease dataset and can inject adversarial client updates to compare detection, aggregation, and recovery behavior. It is a research/teaching simulation, not a clinical tool or a deployment with real hospitals or devices.
 
-## 🚀 Quick Start
+## Run it
 
-**Recommended: Use the Unified Dashboard**
 ```bash
-# Install dependencies
 pip install -r requirements.txt
-
-# Launch unified dashboard (opens at http://localhost:8501)
 bash run_unified.sh
 ```
 
-**Other options (for specific purposes):**
-```bash
-# System test (verify all components)
-python3 tests/test_system.py
+The dashboard runs a fresh simulation using the selected configuration. For command-line runs, use `python main.py`. To run a defense comparison, use `python -m runners.comparison_runner --attack label_flip` or `--all`. Configuration defaults are in `configs/sim_config.yaml`.
 
-# CLI simulations (for scripting/automation)
-python main.py                            # Clean baseline
-python tests/attack_demo.py               # All 4 attacks
-python tests/self_healing_demo.py         # Self-healing demo
+## Dataset
 
-# OLD DASHBOARDS (DEPRECATED - use unified dashboard instead)
-# bash run_dashboard.sh                   # Plain UI, broken recovery counter
-# streamlit run app.py                    # Beautiful UI, fake numbers
-```
+The source data is bundled at `data/processed.cleveland.data` (303 source records). The loader drops rows with missing fields (the commonly observed complete set has 297 records), maps target values 1–4 to the positive class, uses a seeded stratified train/test split, fits feature scaling on training data, and partitions the training rows across simulated clients. Row counts in each split depend on the configured split fraction.
 
-## ✨ Unified Dashboard
+Source: [UCI Heart Disease dataset, ID 45](https://archive.ics.uci.edu/dataset/45/heart+disease). Citation: Janosi, A., Steinbrunn, W., Pfisterer, M., & Detrano, R. (1989), *Heart Disease*, [doi:10.24432/C52P4X](https://doi.org/10.24432/C52P4X). The dataset is distributed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). SHA-256 of the bundled file: `a74b7efa387bc9d108d7d0115d831fe9b414b29ae7124f331b622b4efa0427c8`.
 
-**Launch:** `bash run_unified.sh`
+## Results and scope
 
-Features:
-- 🎨 Cyber HUD design (neon glassmorphism)
-- 🎯 Real DPS (G, C, H, P with shadow validation)
-- 🛡️ Self-healing FSM with automatic recovery
-- 📊 Network topology, accuracy analysis, aggregation weights
-- ⚙️ Per-client attack configuration
+Displayed metrics are computed from the current simulation run. JSON files already under `results/` are historical artifacts; their exact input and execution provenance are unknown, so they should not be treated as verified benchmark results. DPS signals are heuristic indicators within this simulator, not a guarantee that attacks will be detected. Attack behavior is injected into simulated clients.
 
-## What's Included
-
-- **FL Baseline**: FedAvg on UCI Heart Disease dataset
-- **4 Attacks**: label_flip, sign_flip, scaling, backdoor
-- **DPS Detection**: Real-time G, C, H, P scores (D disabled for privacy)
-- **Self-Healing**: FSM-based recovery with checkpoints
-- **Unified Dashboard**: Cyber HUD + real simulation ⭐
-- **Tests**: 20 tests, all passing
-
-## Dashboard Features
-
-- **Real DPS**: G (gradient), C (cosine), H (history), P (performance), D (disabled)
-- **Attacks**: 4 types with per-client configuration
-- **Self-Healing**: Automatic detection → quarantine → recovery
-- **Visualization**: Network topology, DPS radar, trust evolution, aggregation weights
-- **Cyber HUD**: Orbitron font, neon colors, glassmorphism
-
-## Files
-
-```
-configs/sim_config.yaml        - Hyperparameters + attack + self-healing config
-clients/data_loader.py         - Dataset loading & IID partitioning
-clients/client.py              - PyTorch model + Flower client
-aggregation/strategy.py        - FedAvg aggregation
-attacks/                       - Attack implementations (Phase 2)
-recovery/                      - Self-healing layer (Phase 3)
-  ├── health_monitor.py        - Health tracking & degradation detection
-  ├── checkpoint_manager.py    - Save/restore trusted models
-  └── self_heal.py             - FSM recovery controller
-main.py                        - Run simulation
-attack_demo.py                 - Phase 2 benchmark
-self_healing_demo.py           - Phase 3 self-healing demo
-```
-
-## Configuration
-
-Edit `configs/sim_config.yaml`:
-
-**Training:**
-```yaml
-num_rounds: 15
-local_epochs: 5
-hidden_dim: 64
-optimizer_type: "adam"
-```
-
-**Attacks:**
-```yaml
-attack:
-  enabled: true
-  attack_type: "label_flip"
-  num_malicious_clients: 2
-```
-
-**Self-Healing:**
-```yaml
-self_healing:
-  enabled: true
-  dps_threshold: 0.55
-  recovery_rounds: 3
-```
-
-## Expected Results
-
-**Clean (no attacks):**
-- Final accuracy: 78-88% (typical: 80-85%)
-- Smooth convergence in ~10-12 rounds
-
-**With attacks + self-healing:**
-- Detection: DPS >0.55 for malicious clients
-- Recovery: 1-2 attempts triggered
-- Final accuracy: 75-85% (within 3-8% of clean)
-
-See `CHANGES.md` for recent improvements.
+See [PROJECT_GUIDE.md](PROJECT_GUIDE.md) for the directory map, simulation flow, and feature details.

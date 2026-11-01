@@ -1,23 +1,23 @@
-# ASH-FL: Federated Learning Simulation Configuration (IMPROVED)
+# ASH-FL: Federated Learning Simulation Configuration
 
 # Federated Learning Parameters
-num_rounds: 15                   # Total rounds (increased from 3 to 15 for better convergence)
+num_rounds: 15                   # Total federated rounds
 num_clients_total: 5            # Total number of clients in the federation
 num_clients_per_round: 4        # Increased from 3 to 4 for more participation
 
-# Model Training Parameters (IMPROVED)
-learning_rate: 0.01             # Learning rate (works well with Adam)
-batch_size: 8                   # Reduced from 16 to 8 for small dataset
-local_epochs: 5                 # Increased from 3 to 5 for better local learning
-optimizer_type: "adam"          # NEW: Use Adam instead of SGD (better convergence)
+# Model training parameters. Selected by stratified 5-fold tuning on the training
+# partition, then checked once on a separate seeded 20% holdout. See README.md.
+learning_rate: 0.003
+batch_size: 16
+local_epochs: 3
+optimizer_type: "adam"
 
-# Model Architecture (IMPROVED)
-hidden_dim: 64                  # Increased from 32 to 64 for more capacity
-input_dim: 13                   # Number of input features (Heart Disease dataset)
+# Model Architecture
+hidden_dim: 16                  # Compact MLP selected on training-fold validation
 output_dim: 1                   # Binary classification output
 
 # Dataset Configuration
-dataset_id: 45                  # UCI Heart Disease dataset ID
+dataset_path: data/processed.cleveland.data
 random_seed: 42                 # Random seed for reproducibility
 test_split: 0.2                 # Fraction of data reserved for testing
 
@@ -75,7 +75,8 @@ self_healing:
   # Health monitoring thresholds
   accuracy_drop_threshold: 0.15  # Trigger if accuracy drops by this amount
   loss_spike_threshold: 0.3      # Trigger if loss spikes by this fraction
-  dps_threshold: 0.55            # IMPROVED: Lowered from 2.0 to 0.55 for better label-flip detection
+  dps_threshold: 0.55            # Absolute floor combined with peer-relative robust outlier scoring
+  dps_mad_multiplier: 3.0        # Median absolute deviation multiplier for client DPS outliers
   suspicious_fraction_threshold: 0.3  # Fraction of suspicious clients to trigger
   model_drift_threshold: 5.0     # L2 distance threshold for model drift
   baseline_window: 3             # Rolling window for baseline calculation

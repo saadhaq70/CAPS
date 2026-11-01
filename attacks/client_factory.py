@@ -147,6 +147,7 @@ def get_client_fn_with_attacks(
             batch_size=config["batch_size"],
             learning_rate=config["learning_rate"],
             local_epochs=config["local_epochs"],
+            optimizer_type=config.get("optimizer_type", "adam"),
         )
 
         if client_id in malicious_id_set:

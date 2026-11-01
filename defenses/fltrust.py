@@ -31,7 +31,7 @@ class FLTrustDefense(BaseDefense):
         self,
         validation_data: Tuple[np.ndarray, np.ndarray],
         input_dim: int = 13,
-        hidden_dim: int = 32,
+        hidden_dim: int = 16,
         output_dim: int = 1,
         learning_rate: float = 0.01,
         local_epochs: int = 3,

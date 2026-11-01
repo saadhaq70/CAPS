@@ -43,7 +43,9 @@ ENV/
 *.h5
 *.pkl
 *.pickle
-data/
+data/*
+!data/processed.cleveland.data
+!data/README.md
 datasets/
 
 # Model checkpoints

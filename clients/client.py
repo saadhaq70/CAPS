@@ -17,23 +17,21 @@ class HeartDiseaseNet(nn.Module):
     """
     Improved neural network for binary classification on tabular data.
     
-    Architecture: Input → 64 → 32 → 1 (with ReLU activations)
-    Uses deeper capacity for better feature learning.
+    Architecture: Input → hidden_dim → hidden_dim//2 → 1 (with ReLU activations).
     """
     
-    def __init__(self, input_dim: int = 13, hidden_dim: int = 64, output_dim: int = 1):
+    def __init__(self, input_dim: int = 13, hidden_dim: int = 16, output_dim: int = 1):
         """
         Initialize neural network.
         
         Args:
             input_dim: Number of input features (13 for Heart Disease)
-            hidden_dim: Number of neurons in first hidden layer (default: 64)
+            hidden_dim: Number of neurons in first hidden layer (default: 16)
             output_dim: Number of output neurons (1 for binary classification)
         """
         super(HeartDiseaseNet, self).__init__()
         
-        # Two hidden layers for increased capacity
-        # 13 → 64 → 32 → 1
+        # A compact two-hidden-layer MLP for the small tabular dataset.
         self.network = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),
             nn.ReLU(),
@@ -121,7 +119,6 @@ def train_model(
         )
     
     total_loss = 0.0
-    num_batches = 0
     num_samples = 0
     
     for epoch in range(epochs):
@@ -135,13 +132,12 @@ def train_model(
             loss.backward()
             optimizer.step()
             
-            epoch_loss += loss.item()
-            num_batches += 1
+            epoch_loss += loss.item() * X_batch.size(0)
         
-        total_loss += epoch_loss / len(train_loader)
+        total_loss += epoch_loss
     
     num_samples = len(train_loader.dataset)
-    avg_loss = total_loss / epochs
+    avg_loss = total_loss / (epochs * num_samples) if num_samples else 0.0
     
     return num_samples, avg_loss
 
@@ -178,7 +174,7 @@ def evaluate_model(
             outputs = model(X_batch)
             loss = criterion(outputs, y_batch.unsqueeze(1))
             
-            total_loss += loss.item()
+            total_loss += loss.item() * X_batch.size(0)
             
             # Binary classification: threshold at 0.5
             predicted = (outputs >= 0.5).float()
@@ -186,7 +182,7 @@ def evaluate_model(
             correct += (predicted.squeeze() == y_batch).sum().item()
     
     num_samples = len(test_loader.dataset)
-    avg_loss = total_loss / len(test_loader)
+    avg_loss = total_loss / num_samples if num_samples else 0.0
     accuracy = correct / total if total > 0 else 0.0
     
     return num_samples, avg_loss, accuracy

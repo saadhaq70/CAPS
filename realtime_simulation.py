@@ -10,13 +10,15 @@ import numpy as np
 from typing import Dict, List, Tuple, Optional
 from collections import defaultdict
 import time
+from pathlib import Path
 
 from clients.data_loader import HeartDiseaseDataLoader
 from clients.client import get_client_fn, HeartDiseaseNet, get_model_parameters, set_model_parameters
 from aggregation.strategy import FedAvgStrategy
 from attacks.base import AttackConfig
 from attacks.client_factory import get_client_fn_with_attacks
-from recovery import SelfHealingController, HealthMonitor
+from recovery import SelfHealingController
+from dashboard.dps_calculator import DPSCalculator
 
 
 class RealTimeSimulation:
@@ -25,13 +27,18 @@ class RealTimeSimulation:
     def __init__(self, config_path: str = "configs/sim_config.yaml"):
         """Initialize simulation with configuration."""
         self.config = self._load_config(config_path)
+        torch.manual_seed(self.config["random_seed"])
+        np.random.seed(self.config["random_seed"])
         self.metrics_history = []
         self.dps_history = []
         self.state_history = []
         
     def _load_config(self, config_path: str) -> dict:
         """Load configuration from YAML file."""
-        with open(config_path, 'r') as f:
+        config_file = Path(config_path)
+        if not config_file.is_absolute():
+            config_file = Path(__file__).resolve().parent / config_file
+        with config_file.open('r', encoding='utf-8') as f:
             config = yaml.safe_load(f)
         return config
     
@@ -56,7 +63,7 @@ class RealTimeSimulation:
         sh_cfg = self.config.get("self_healing", {})
         if sh_cfg.get("enabled", False):
             print(f"{'Self-Healing:':<20} ENABLED | "
-                  f"DPS threshold: {sh_cfg.get('dps_threshold', 2.0)} | "
+                  f"DPS threshold: {sh_cfg.get('dps_threshold', 0.55)} | "
                   f"Recovery rounds: {sh_cfg.get('recovery_rounds', 3)}")
         else:
             print(f"{'Self-Healing:':<20} DISABLED")
@@ -80,7 +87,8 @@ class RealTimeSimulation:
         # DPS scores
         avg_dps = np.mean(list(dps_scores.values())) if dps_scores else 0.0
         max_dps = max(dps_scores.values()) if dps_scores else 0.0
-        suspicious = sum(1 for dps in dps_scores.values() if dps > 2.0) if dps_scores else 0
+        threshold = self.config.get("self_healing", {}).get("dps_threshold", 0.55)
+        suspicious = sum(1 for dps in dps_scores.values() if dps > threshold) if dps_scores else 0
         
         # Status indicator
         if sh_state == "NORMAL":
@@ -107,33 +115,19 @@ class RealTimeSimulation:
         else:
             print(f"   └─ Quarantined Clients: None")
     
-    def _compute_dps_scores(self, client_updates: List[Tuple[int, List]]) -> Dict[int, float]:
-        """Compute Dynamic Poisoning Scores for clients."""
-        dps_scores = {}
-        
-        if not client_updates or len(client_updates) < 2:
-            return dps_scores
-        
-        # Extract client IDs and parameters
-        client_params = {}
-        for cid, params in client_updates:
-            client_params[cid] = params
-        
-        # Compute pairwise distances
-        for cid1, params1 in client_params.items():
-            distances = []
-            for cid2, params2 in client_params.items():
-                if cid1 != cid2:
-                    # L2 distance between parameter vectors
-                    dist = 0.0
-                    for p1, p2 in zip(params1, params2):
-                        dist += np.sum((p1 - p2) ** 2)
-                    distances.append(np.sqrt(dist))
-            
-            # DPS = average distance to other clients
-            dps_scores[cid1] = np.mean(distances) if distances else 0.0
-        
-        return dps_scores
+    def _compute_dps_scores(
+        self, client_updates: List[Tuple[int, List]], round_num: int,
+        global_params: List[np.ndarray],
+    ) -> Dict[int, float]:
+        """Compute normalized multi-signal DPS on held-out validation records."""
+        if not client_updates:
+            return {}
+        return self.dps_calculator.compute_dps_scores(
+            client_updates=[params for _, params in client_updates],
+            client_ids=[cid for cid, _ in client_updates],
+            round_num=round_num,
+            global_params=global_params,
+        )
     
     def run(self):
         """Run the integrated simulation."""
@@ -142,7 +136,7 @@ class RealTimeSimulation:
         # Step 1: Load and partition dataset
         print("\n[Step 1/5] Loading UCI Heart Disease dataset...")
         data_loader = HeartDiseaseDataLoader(
-            dataset_id=self.config["dataset_id"],
+            dataset_path=Path(__file__).resolve().parent / self.config["dataset_path"],
             random_seed=self.config["random_seed"],
             test_split=self.config["test_split"]
         )
@@ -153,7 +147,19 @@ class RealTimeSimulation:
         )
         
         client_datasets = federated_data["client_data"]
-        test_data = federated_data["test_data"]
+        X_holdout, y_holdout = federated_data["test_data"]
+        validation_size = len(X_holdout) // 2
+        validation_data = (X_holdout[:validation_size], y_holdout[:validation_size])
+        test_data = (X_holdout[validation_size:], y_holdout[validation_size:])
+        self.dps_calculator = DPSCalculator(
+            self.config["num_clients_total"],
+            model_template=HeartDiseaseNet(
+                input_dim=federated_data["input_dim"],
+                hidden_dim=self.config["hidden_dim"],
+                output_dim=self.config["output_dim"],
+            ),
+            validation_data=validation_data,
+        )
         self.config["input_dim"] = federated_data["input_dim"]
         print(f"   ✓ Dataset loaded: {federated_data['input_dim']} features, {len(test_data[0])} test samples")
         
@@ -257,7 +263,7 @@ class RealTimeSimulation:
             print(f"Received {len(client_updates)} client updates")
             
             # Compute DPS scores
-            dps_scores = self._compute_dps_scores(client_updates)
+            dps_scores = self._compute_dps_scores(client_updates, round_num, global_params)
             
             # Aggregate parameters (simple FedAvg)
             all_params = [params for _, params in client_updates]
@@ -354,7 +360,8 @@ class RealTimeSimulation:
                 print(f"\n🔍 DPS ANALYSIS:")
                 print(f"   ├─ Average DPS:       {np.mean(all_dps):6.3f}")
                 print(f"   ├─ Max DPS:           {np.max(all_dps):6.3f}")
-                print(f"   └─ Suspicious Count:  {sum(1 for dps in all_dps if dps > 2.0)}/{len(all_dps)}")
+                threshold = self.config.get("self_healing", {}).get("dps_threshold", 0.55)
+                print(f"   └─ Suspicious Count:  {sum(1 for dps in all_dps if dps > threshold)}/{len(all_dps)}")
         
         # State transitions
         if self.sh_controller:
